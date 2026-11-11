@@ -2,7 +2,7 @@
 export const STORES = [
   'users', 'free_youtube_courses', 'paid_job_courses', 'learning_paths',
   'user_plans_and_reviews', 'hourly_bookings', 'subscriptions', 'certificates',
-  'notifications', 'config'
+  'notifications', 'config', 'content_library', 'content_files'
 ];
 
 const mem = (globalThis.__ILTIZAM_MEM ||= {});
@@ -46,7 +46,25 @@ async function open(name) {
   return fallback(name);
 }
 
+async function rawStore(name) {
+  await open(name);
+  if (!blobsMod) return null;
+  try { return blobsMod.getStore({ name, consistency: 'strong' }); } catch { return null; }
+}
+
 export const db = {
+  // ملفات ثنائية (مرفقات وفيديو): Netlify Blobs مباشرة، أو base64 في المخزن البديل
+  async putFile(store, key, buffer, meta = {}) {
+    const s = await rawStore(store);
+    if (s) return s.set(String(key), buffer, { metadata: meta });
+    return (await open(store)).set(String(key), { b64: Buffer.from(buffer).toString('base64'), meta });
+  },
+  async getFile(store, key) {
+    const s = await rawStore(store);
+    if (s) { const r = await s.getWithMetadata(String(key), { type: 'arrayBuffer' }); return r ? { data: r.data, meta: r.metadata } : null; }
+    const r = await (await open(store)).get(String(key));
+    return r ? { data: Buffer.from(r.b64, 'base64'), meta: r.meta } : null;
+  },
   async get(store, key) { return (await open(store)).get(String(key)); },
   async set(store, key, value) { await (await open(store)).set(String(key), value); return value; },
   async del(store, key) { await (await open(store)).del(String(key)); },

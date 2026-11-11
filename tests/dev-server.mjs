@@ -13,7 +13,7 @@ http.createServer(async (req, res) => {
       const chunks = []; for await (const c of req) chunks.push(c);
       const fn = (await import(`../netlify/functions/${api[1]}.js`)).default;
       const r = await fn(new Request(url, { method: req.method, headers: req.headers, body: chunks.length ? Buffer.concat(chunks) : undefined }));
-      res.writeHead(r.status, Object.fromEntries(r.headers)); return res.end(await r.text());
+      res.writeHead(r.status, Object.fromEntries(r.headers)); return res.end(Buffer.from(await r.arrayBuffer()));
     }
     const file = join(ROOT, normalize(url.pathname === '/' ? 'index.html' : url.pathname));
     if (!file.startsWith(ROOT)) throw 0;

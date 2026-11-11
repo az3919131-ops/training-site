@@ -15,7 +15,7 @@
     lang: 'ar', theme: '', currency: 'SAR', plan: [], favs: [], progress: {}, reviews: [], links: [],
     notifs: [], bookings: [], certs: [], token: '', user: null, sub: null, last: ''
   }, (() => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } })());
-  const R = { cat: 'all', q: '', cycle: 'monthly', links: [], paidLessons: {}, wa: CONFIG.whatsapp, playing: null, admin: null, adminTab: 'subs' };
+  const R = { cat: 'all', q: '', cycle: 'monthly', content: [], trainers: [], links: [], paidLessons: {}, wa: CONFIG.whatsapp, playing: null, admin: null, adminTab: 'subs' };
   let syncTimer;
   function save(sync = true) {
     try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* التخزين غير متاح */ }
@@ -37,6 +37,12 @@
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { const e = new Error(d.error || tr('تعذر الاتصال بالخادم.', 'Server error.')); e.status = r.status; throw e; }
     return d;
+  }
+
+  async function apiBlob(path) {
+    const r = await fetch('/api/' + path, { headers: S.token ? { authorization: 'Bearer ' + S.token } : {} });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || tr('تعذر تحميل الملف.', 'Download failed.'));
+    return r.blob();
   }
 
   /* ---------- البيانات ---------- */
@@ -71,8 +77,9 @@
     });
   });
   const course = id => [...freeAll(), ...paidAll()].find(c => c.id === id);
-  const hasAccess = () => !!S.user && (['admin', 'instructor'].includes(S.user.role) || ['active', 'renewal_due'].includes(S.sub?.status));
-  const isStaff = () => !!S.user && ['admin', 'instructor'].includes(S.user.role);
+  const STAFF = ['admin', 'instructor', 'teacher'];
+  const hasAccess = () => !!S.user && (STAFF.includes(S.user.role) || ['active', 'renewal_due'].includes(S.sub?.status));
+  const isStaff = () => !!S.user && STAFF.includes(S.user.role);
   const doneOf = c => (S.progress[c.id]?.done || []).filter(i => i < c.lessons.length);
   const pct = c => (c.lessons.length ? Math.round(doneOf(c).length / c.lessons.length * 100) : 0);
   const match = c => (R.cat === 'all' || c.cat === R.cat || (c.cats || []).includes(R.cat)) &&
@@ -254,11 +261,13 @@
             <p class="err" role="alert"></p><button class="btn soft sm">${tr('+ أضف درساً للدبلوم', '+ Add lesson')}</button></form>` : ''}
         </section>
         <section class="panel"><h2>${tr('المرفقات الهندسية وملفات العمل', 'Engineering attachments & work files')}</h2>
+          ${R.content.some(x => x.courseId === c.id) ? `<ul class="files" style="margin-block-end:8px">${R.content.filter(x => x.courseId === c.id).map(x => `<li><span><span class="badge">${CT()[x.type][0]}</span> ${esc(x.title)}</span><button class="btn sky sm" data-act="content-open" data-id="${esc(x.id)}">${x.locked ? '🔒 ' + tr('للمشتركين', 'Subscribers') : tr('افتح', 'Open')}</button></li>`).join('')}</ul>` : ''}
           ${(c.attachments || []).length ? `<ul class="files">${c.attachments.map(a => `<li><span><span class="badge">${esc(a.kind)}</span> ${esc(a.name)}</span>
             ${!open ? `<button class="btn soft sm" data-act="subscribe" data-id="all-access">🔒 ${tr('للمشتركين', 'Subscribers')}</button>`
               : a.file ? `<button class="btn sky sm" data-act="download" data-id="${a.file}">${tr('تحميل', 'Download')}</button>`
               : `<span class="small muted">${tr('يُرفع من المحاضر', 'Uploaded by instructor')}</span>`}</li>`).join('')}</ul>`
-            : `<p class="muted">${tr('لا توجد مرفقات لهذا الكورس بعد.', 'No attachments for this course yet.')}</p>`}
+            : R.content.some(x => x.courseId === c.id) ? '' : `<p class="muted">${tr('لا توجد مرفقات لهذا الكورس بعد.', 'No attachments for this course yet.')}</p>`}
+          ${isStaff() ? `<button class="btn soft sm" style="margin-block-start:12px" data-act="add-content" data-course="${esc(c.id)}">${tr('+ أضف محتوى لهذا الكورس', '+ Add content to this course')}</button>` : ''}
         </section>
       </div>
       <aside class="side">
@@ -289,6 +298,61 @@
       <div class="kpi"><b>128</b><span>${tr('أمر عمل مفتوح', 'Open work orders')}</span></div><div class="kpi"><b>86%</b><span>${tr('نسبة الإنجاز', 'Completion')}</span></div>
       <div class="kpi"><b>42</b><span>${tr('فني في الميدان', 'Field technicians')}</span></div><div class="kpi"><b>17</b><span>${tr('معدة عاملة', 'Active equipment')}</span></div></div>
       <div class="bars">${[['الأحد', 72], ['الاثنين', 88], ['الثلاثاء', 64], ['الأربعاء', 93], ['الخميس', 80]].map(([d, v]) => `<div><span>${d}</span><i style="width:${v}%"></i><span>${v}%</span></div>`).join('')}</div></div></section>`;
+
+  /* ---------- صفحة المقدمة ---------- */
+  const pull = (text, start = 0) => text.split(' ').map((w, i) => `<span class="pu" style="animation-delay:${(start + i) * 80}ms">${w}</span>`).join(' ');
+  const welcomePage = () => `<section class="intro"><div class="intro-in">
+      <video class="intro-bg" autoplay loop muted playsinline aria-hidden="true" ${matchMedia('(prefers-reduced-motion: reduce)').matches ? '' : 'src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260405_170732_8a9ccda6-5cff-4628-b164-059c500a2b41.mp4"'}></video>
+      <div class="intro-noise" aria-hidden="true"></div><div class="intro-shade" aria-hidden="true"></div>
+      <nav class="notch" aria-label="${tr('روابط المنصة', 'Platform links')}">
+        <a href="#/free">${tr('المكتبة المجانية', 'Free library')}</a><a href="#/paid">${tr('الدبلومات', 'Diplomas')}</a><a href="#/paths">${tr('المسارات', 'Paths')}</a>
+        <a href="#/trainers">${tr('المدربون', 'Trainers')}</a><a href="#/pricing">${tr('الباقات', 'Plans')}</a>
+        <button data-act="lang">${S.lang === 'en' ? 'ع' : 'EN'}</button>
+      </nav>
+      <div class="intro-grid">
+        <h1 class="intro-title" aria-label="${tr('التزام التدريب+', 'Iltizam Training+')}"><span class="pu">${tr('التزام', 'Iltizam')}<sup>+</sup></span></h1>
+        <div class="intro-side">
+          <form class="glass f" data-form="auth" data-mode="login" novalidate>
+            <strong>${tr('دخول المتدربين والمدربين', 'Trainee & trainer login')}</strong>
+            <label>${tr('البريد الإلكتروني', 'Email')}<input name="email" type="email" required dir="ltr" autocomplete="email"></label>
+            <label>${tr('كلمة المرور', 'Password')}<input name="password" type="password" required dir="ltr" autocomplete="current-password"></label>
+            <p class="err" role="alert"></p>
+            <button class="btn gold block">${tr('دخول', 'Log in')}</button>
+            <div class="chips"><span>${tr('حساب جديد:', 'New account:')}</span>
+              <a href="/join/trainee" data-join="trainee">${tr('متدرب', 'Trainee')}</a><a href="/join/instructor" data-join="instructor">${tr('مدرب', 'Trainer')}</a>
+              <a href="/join/teacher" data-join="teacher">${tr('مدرّس', 'Teacher')}</a><a href="/join/contractor" data-join="contractor">${tr('مقاول', 'Contractor')}</a></div>
+          </form>
+          <p class="intro-lead">${pull(tr('منصة واحدة تجمع مهندسي الكهرباء والعقد الموحد والمكتب الفني ومتعلمي الذكاء الاصطناعي واللغات في السعودية ومصر: تعلّم مجاناً، وتأهّل للعمل مع مدربين معتمدين.', 'One platform for electrical, unified-contract and technical-office engineers and AI and language learners in Saudi Arabia and Egypt: learn free, get job-ready with approved trainers.'), 4)}</p>
+          <a class="arrow-btn" href="#/home">${tr('ادخل المنصة كزائر', 'Enter as guest')}<span aria-hidden="true">${S.lang === 'en' ? '→' : '←'}</span></a>
+        </div>
+      </div>
+      <p class="intro-credit">Project manager &nbsp;Eng&nbsp; Ahmed Zahran</p>
+    </div></section>`;
+
+  /* ---------- مكتبة المحتوى والمدربون ---------- */
+  const CT = () => ({ video: [tr('فيديو', 'Video'), '🎬'], file: [tr('ملف', 'File'), '📎'], link: [tr('رابط', 'Link'), '🔗'], article: [tr('مقال', 'Article'), '📝'] });
+  const kb = n => (n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
+  function libraryPage() {
+    const list = R.content.filter(x => (R.cat === 'all' || x.cat === R.cat) && (!R.q || (x.title + ' ' + x.desc).toLowerCase().includes(R.q.toLowerCase())));
+    return filters() + `<section class="section wrap">
+      ${head(tr('محتوى المدربين', 'Trainer content'), tr('مكتبة المحتوى العلمي', 'Content library'), tr('فيديوهات وملفات ومقالات وروابط يضيفها مدير المنصة والمدربون المعتمدون.', 'Videos, files, articles and links added by the admin and approved trainers.'),
+        isStaff() ? `<button class="btn gold sm" data-act="add-content">${tr('+ أضف محتوى', '+ Add content')}</button>` : '')}
+      <div class="grid">${list.length ? list.map(x => { const c = x.courseId && course(x.courseId); return `<article class="card"><div class="card-body">
+        <div class="badges" style="position:static"><span class="badge">${CT()[x.type][1]} ${CT()[x.type][0]}</span><span class="badge ${x.access === 'paid' ? 'paid' : 'free'}">${x.access === 'paid' ? tr('للمشتركين', 'Subscribers') : tr('مجاني', 'Free')}</span></div>
+        <h3>${esc(x.title)}</h3><p>${esc(x.desc)}</p>
+        <div class="meta"><span>${esc(x.byName || '')}</span>${x.hasFile ? `<span dir="ltr">${esc(x.fileName)} · ${kb(x.size)}</span>` : ''}${c ? `<span>${esc(title(c))}</span>` : ''}</div>
+        <div class="card-foot"><button class="btn sm ${x.locked ? 'soft' : 'start'}" data-act="content-open" data-id="${esc(x.id)}">${x.locked ? '🔒 ' + tr('اشترك للفتح', 'Subscribe') : x.type === 'file' ? tr('تحميل', 'Download') : tr('افتح', 'Open')}</button>
+        ${S.user && (S.user.role === 'admin' || x.by === S.user.email) ? `<button class="icon-btn" data-act="del-content" data-id="${esc(x.id)}" aria-label="${tr('حذف', 'Delete')}" title="${tr('حذف', 'Delete')}">✕</button>` : ''}</div>
+      </div></article>`; }).join('') : `<div class="empty">${isStaff() ? tr('لا يوجد محتوى بعد. أضف أول فيديو أو ملف.', 'No content yet. Add the first item.') : tr('لم يُضف محتوى في هذا التخصص بعد.', 'No content here yet.')}</div>`}</div></section>`;
+  }
+  const trainersPage = () => `<section class="section wrap">
+      ${head(tr('فريق التدريب', 'Training team'), tr('المدربون والمدرسون المعتمدون', 'Approved trainers & teachers'), tr('مهندسون وخبراء معتمدون من إدارة المنصة. يمكنك حجز جلسة استشارية مع المدرب من صفحة أي كورس.', 'Engineers and experts approved by the platform.'),
+        `<a class="btn gold sm" href="/join/instructor" data-join="instructor">${tr('انضم كمدرب', 'Become a trainer')}</a>`)}
+      <div class="grid">${R.trainers.length ? R.trainers.map(u => `<article class="card"><div class="card-body">
+        <div class="avatar" aria-hidden="true">${esc(u.name.trim()[0] || '؟')}</div><h3>${esc(u.name)}</h3>
+        <div class="badges" style="position:static"><span class="badge mine">${u.role === 'teacher' ? tr('مدرّس', 'Teacher') : tr('مدرب', 'Trainer')}</span>${u.specialty ? `<span class="badge">${esc(u.specialty)}</span>` : ''}</div>
+        <p>${esc(u.bio || tr('لم يضف نبذة بعد.', 'No bio yet.'))}</p></div></article>`).join('')
+        : `<div class="empty">${tr('لم يُعتمد مدربون بعد. سجّل كمدرب وسيظهر ملفك هنا بعد اعتماد المدير.', 'No approved trainers yet. Sign up as a trainer.')}</div>`}</div></section>`;
 
   /* ---------- الصفحات الشخصية ---------- */
   function row(c, acts) {
@@ -339,6 +403,14 @@
             : `<p class="muted">${tr('أنت على الباقة المجانية.', 'You are on the free plan.')}</p><div class="tabs"><a class="btn gold sm" href="#/pricing">${tr('عرض الباقات', 'See plans')}</a></div>`}
         </section>
       </div>
+      ${isStaff() ? `<section class="panel"><h2>${tr('لوحة المدرب', 'Trainer panel')}</h2>
+        <div class="tabs" style="margin-block:0 16px"><button class="btn gold sm" data-act="add-content">${tr('+ أضف محتوى (فيديو / ملف / مقال)', '+ Add content')}</button><a class="btn soft sm" href="#/library">${tr('إدارة مكتبة المحتوى', 'Manage library')}</a><a class="btn soft sm" href="#/paid">${tr('إضافة دروس للدبلومات', 'Add diploma lessons')}</a></div>
+        ${u.role === 'admin' ? '' : `<form class="f" data-form="profile" novalidate><div class="cols">
+          <label>${tr('الاسم', 'Name')}<input name="name" required value="${esc(u.name)}"></label>
+          <label>${tr('التخصص', 'Specialty')}<input name="specialty" maxlength="120" value="${esc(u.specialty || '')}"></label></div>
+          <label>${tr('نبذة تظهر في صفحة المدربين', 'Bio shown on the trainers page')}<textarea name="bio" maxlength="600">${esc(u.bio || '')}</textarea></label>
+          <input type="hidden" name="phone" value="${esc(u.phone || '')}"><input type="hidden" name="company" value="${esc(u.company || '')}">
+          <p class="err" role="alert"></p><button class="btn primary sm">${tr('حفظ الملف التعريفي', 'Save profile')}</button></form>`}</section>` : ''}
       ${u.role === 'admin' ? adminPanel() : ''}</div>`;
   }
   const subMsg = s => `مرحباً، أرغب في تفعيل اشتراك «${s.planTitle}» (${s.cycle === 'yearly' ? 'سنوي' : 'شهري'}) في منصة التزام التدريب.\nالاسم: ${S.user?.name || ''}\nالبريد: ${S.user?.email || ''}\nالمبلغ: ${money(s.amountSAR)}`;
@@ -356,7 +428,8 @@
         links: () => R.links.map(l => `<div class="row"><div class="grow"><strong>${esc(l.title)}</strong><div class="small muted" dir="ltr" style="text-align:start">${esc(l.url)} · ${esc(l.owner)}</div></div>
           <span class="status ${l.approved ? 'active' : 'pending'}">${l.approved ? tr('معتمد', 'Approved') : tr('خاص بصاحبه', 'Private')}</span><button class="btn primary sm" data-act="adm-link" data-id="${esc(l.id)}" data-s="${l.approved ? '' : '1'}">${l.approved ? tr('إلغاء الاعتماد', 'Unapprove') : tr('اعتماد للجميع', 'Approve')}</button></div>`),
         users: () => a.users.map(u => `<div class="row"><div class="grow"><strong>${esc(u.name)}</strong> <span class="badge">${esc(u.role)}</span><div class="small muted" dir="ltr" style="text-align:start">${esc(u.email)} · ${esc(u.phone)}</div></div>
-          ${u.requestedRole ? `<button class="btn primary sm" data-act="adm-role" data-id="${esc(u.email)}" data-s="instructor">${tr('اعتماد كمحاضر', 'Approve instructor')}</button>` : ''}</div>`),
+          ${u.requestedRole ? `<button class="btn primary sm" data-act="adm-role" data-id="${esc(u.email)}" data-s="${esc(u.requestedRole)}">${tr('اعتماد طلب', 'Approve')} ${esc(u.requestedRole)}</button>` : ''}
+          <select class="pick" data-change="adm-role" data-id="${esc(u.email)}" aria-label="${tr('تغيير الصلاحية', 'Change role')}">${['trainee', 'instructor', 'teacher', 'contractor_b2b'].map(r => `<option ${r === u.role ? 'selected' : ''}>${r}</option>`).join('')}</select></div>`),
         notes: () => a.notes.map(n => `<div class="row"><div class="grow"><strong>${esc(n.title)}</strong><div class="small muted">${new Date(n.at).toLocaleString(S.lang === 'en' ? 'en' : 'ar-EG')}</div><p class="small">${esc(Object.entries(n.data).map(([k, v]) => `${k}: ${v}`).join(' · '))}</p></div></div>`)
       }[R.adminTab]().join('') || none;
     }
@@ -398,7 +471,7 @@
   }
 
   /* ---------- التوجيه ---------- */
-  function route() { const [name = 'home', arg = ''] = location.hash.replace(/^#\/?/, '').split('/'); return { name: name || 'home', arg: decodeURIComponent(arg) }; }
+  function route() { const [name = '', arg = ''] = location.hash.replace(/^#\/?/, '').split('/'); return { name: name || (S.user ? 'home' : 'welcome'), arg: decodeURIComponent(arg) }; }
   function render() {
     const { name, arg } = route(), searching = !!R.q;
     const views = {
@@ -406,9 +479,11 @@
       free: () => filters() + freeSec() + creator(),
       paid: () => filters() + paidSec() + pricingSec(),
       paths: () => filters() + pathsSec() + creator(),
+      welcome: welcomePage, library: libraryPage, trainers: trainersPage,
       platforms: platformsSec, pricing: pricingSec, plan: planPage, reviews: reviewsPage, account: accountPage, settings: settingsPage,
       course: () => coursePage(arg), verify: () => verifyPage(arg)
     };
+    document.body.classList.toggle('on-welcome', name === 'welcome');
     $('#main').innerHTML = (views[name] || views.home)();
     $$('[data-nav]').forEach(a => a.dataset.nav === name ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
     badge();
@@ -438,8 +513,10 @@
         <label>${tr('كلمة المرور', 'Password')}<input name="password" type="password" required minlength="8" dir="ltr" autocomplete="${reg ? 'new-password' : 'current-password'}"></label>
         ${reg ? `<label>${tr('نوع الحساب', 'Account type')}<select name="role">
           <option value="trainee" ${role === 'trainee' ? 'selected' : ''}>${tr('متدرب', 'Trainee')}</option>
-          <option value="instructor" ${role === 'instructor' ? 'selected' : ''}>${tr('محاضر (يحتاج اعتماد المدير)', 'Instructor (needs approval)')}</option>
+          <option value="instructor" ${role === 'instructor' ? 'selected' : ''}>${tr('مدرب / محاضر (يحتاج اعتماد المدير)', 'Trainer (needs approval)')}</option>
+          <option value="teacher" ${role === 'teacher' ? 'selected' : ''}>${tr('مدرّس لغات / تأسيس (يحتاج اعتماد المدير)', 'Teacher (needs approval)')}</option>
           <option value="contractor_b2b" ${role === 'contractor_b2b' ? 'selected' : ''}>${tr('مقاول / شركة B2B', 'Contractor / B2B')}</option></select></label>
+          <label>${tr('التخصص (للمدربين والمدرسين)', 'Specialty (trainers)')}<input name="specialty" maxlength="120"></label>
           <label>${tr('اسم الشركة (للمقاولين)', 'Company (contractors)')}<input name="company" maxlength="120"></label>` : ''}
         <p class="err" role="alert"></p>
         <button class="btn primary">${reg ? tr('إنشاء الحساب', 'Create account') : tr('دخول', 'Log in')}</button>
@@ -455,6 +532,33 @@
       <label>${tr('وصف مختصر (اختياري)', 'Short description (optional)')}<textarea name="desc" maxlength="400"></textarea></label>
       <p class="small muted">${S.user ? tr('يُحفظ الرابط في حسابك ويظهر لك فوراً، ويظهر لبقية المتدربين بعد اعتماد المدير.', 'Saved to your account; visible to others after admin approval.') : tr('يُحفظ الرابط على هذا الجهاز. سجّل الدخول لحفظه سحابياً.', 'Saved on this device. Log in to sync.')}</p>
       <p class="err" role="alert"></p><button class="btn gold">${tr('أضف الآن', 'Add now')}</button></form>`);
+  }
+  function contentModal(courseId = '') {
+    openModal(tr('أضف محتوى علمياً', 'Add content'), `<form class="f" data-form="content" novalidate>
+      <div class="cols"><label>${tr('النوع', 'Type')}<select name="type">${Object.entries(CT()).map(([k, v]) => `<option value="${k}">${v[1]} ${v[0]}</option>`).join('')}</select></label>
+      <label>${tr('الإتاحة', 'Access')}<select name="access"><option value="free">${tr('مجاني للجميع', 'Free')}</option><option value="paid">${tr('للمشتركين فقط', 'Subscribers only')}</option></select></label></div>
+      <label>${tr('العنوان', 'Title')}<input name="title" required maxlength="140"></label>
+      <label>${tr('وصف مختصر', 'Short description')}<textarea name="desc" maxlength="600" style="min-height:64px"></textarea></label>
+      <div class="cols"><label>${tr('التخصص', 'Category')}<select name="cat">${catOptions(R.cat === 'all' ? 'sec' : R.cat)}</select></label>
+      <label>${tr('ربطه بكورس (اختياري)', 'Attach to course (optional)')}<select name="courseId"><option value="">${tr('بدون — مكتبة المحتوى فقط', 'None')}</option>${courseOptions(courseId)}</select></label></div>
+      <label>${tr('رابط (يوتيوب، Google Drive، أو أي موقع)', 'URL (YouTube, Drive or any site)')}<input name="url" type="url" dir="ltr" placeholder="https://"></label>
+      <label>${tr('أو ارفع ملفاً (PDF، Excel، DWG، فيديو قصير… حتى 4 ميجابايت)', 'Or upload a file (up to 4 MB)')}<input name="file" type="file"></label>
+      <label>${tr('نص المقال (لنوع «مقال»)', 'Article text (for “Article”)')}<textarea name="body" maxlength="20000"></textarea></label>
+      <p class="small muted">${tr('الفيديوهات الطويلة: ارفعها على يوتيوب (غير مدرج) أو Google Drive وألصق الرابط هنا.', 'For long videos, upload to YouTube (unlisted) or Drive and paste the link.')}</p>
+      <p class="err" role="alert"></p><button class="btn gold">${tr('نشر المحتوى', 'Publish')}</button></form>`);
+  }
+  async function openContent(x) {
+    if (x.locked) return subscribe('all-access');
+    if (x.type === 'article') return openModal(esc(x.title), `<p style="white-space:pre-wrap">${esc(x.body)}</p>`);
+    if (x.hasFile) {
+      toast(tr('جارٍ التحميل…', 'Loading…'));
+      const blob = await apiBlob('content-library?action=file&id=' + encodeURIComponent(x.id)), u = URL.createObjectURL(blob);
+      if (x.type === 'video' || /^video\//.test(x.mime)) return openModal(esc(x.title), `<video controls autoplay src="${u}" style="width:100%;border-radius:14px;background:#000"></video>`);
+      const a = document.createElement('a'); a.href = u; a.download = x.fileName; document.body.append(a); a.click(); a.remove(); return;
+    }
+    const y = embed(ytParse(x.url));
+    if (y) return openModal(esc(x.title), `<div class="frame" style="position:relative;aspect-ratio:16/9"><iframe src="${y}" title="${esc(x.title)}" style="position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:14px" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe></div>`);
+    const u = safeUrl(x.url); if (u) window.open(u, '_blank', 'noopener');
   }
   function bookModal(id) {
     const c = course(id), today = new Date().toISOString().slice(0, 10);
@@ -570,6 +674,9 @@
       location.hash = c ? '#/course/' + encodeURIComponent(c.id) : '#/plan';
     },
     'add-link': el => linkModal(el.dataset.path || ''),
+    'add-content': el => contentModal(el.dataset.course || ''),
+    'content-open': el => { const x = R.content.find(i => i.id === el.dataset.id); if (x) openContent(x).catch(e => toast(e.message)); },
+    'del-content': async el => { if (!confirm(tr('حذف هذا المحتوى نهائياً؟', 'Delete this content permanently?'))) return; try { await api('content-library?action=delete', { id: el.dataset.id }); await refresh(); } catch (e) { toast(e.message); } },
     book: el => bookModal(el.dataset.id),
     review: el => reviewModal(el.dataset.id || S.last || SEED.free[1].id, el.dataset.rid),
     'del-review': el => { S.reviews = S.reviews.filter(r => r.id !== el.dataset.id); save(); render(); },
@@ -606,20 +713,35 @@
     'adm-activate': async el => { try { await api('subscription-manager?action=activate', { id: el.dataset.id }); toast(tr('تم التفعيل', 'Activated')); loadAdmin(); } catch (e) { toast(e.message); } },
     'adm-booking': async el => { try { await api('booking-engine?action=status', { id: el.dataset.id, status: el.dataset.s }); loadAdmin(); } catch (e) { toast(e.message); } },
     'adm-link': async el => { try { await api('courses-and-paths?action=approve-link', { id: el.dataset.id, approved: !!el.dataset.s }); await refresh(); } catch (e) { toast(e.message); } },
-    'adm-role': async el => { try { await api('auth-rbac?action=set-role', { email: el.dataset.id, role: el.dataset.s }); loadAdmin(); } catch (e) { toast(e.message); } }
+    'adm-role': async el => { try { await api('auth-rbac?action=set-role', { email: el.dataset.id, role: el.dataset.s || el.value }); toast(tr('تم تحديث الصلاحية', 'Role updated')); loadAdmin(); refresh(); } catch (e) { toast(e.message); } }
   };
   document.addEventListener('click', e => {
     const j = e.target.closest('[data-join]');
     if (j) { e.preventDefault(); return authModal('register', { contractor: 'contractor_b2b' }[j.dataset.join] || j.dataset.join); }
+    if (e.target.closest('[data-change]')) return;
     const el = e.target.closest('[data-act]');
     if (el && A[el.dataset.act]) { if (el.tagName === 'A') e.preventDefault(); A[el.dataset.act](el, e); }
   });
 
+  document.addEventListener('change', e => { const el = e.target.closest('[data-change]'); if (el && A[el.dataset.change]) A[el.dataset.change](el); });
+  const fileB64 = f => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = () => no(new Error(tr('تعذرت قراءة الملف.', 'Could not read file.'))); r.readAsDataURL(f); });
   const FORMS = {
+    async content(f, d) {
+      const file = d.file && d.file.size ? d.file : null; delete d.file;
+      if (!d.title.trim()) throw new Error(tr('اكتب عنواناً.', 'Add a title.'));
+      if (file) {
+        if (file.size > 4 * 1024 * 1024) throw new Error(tr('الملف أكبر من 4 ميجابايت. ارفعه على يوتيوب أو Google Drive وألصق الرابط.', 'File exceeds 4 MB. Upload elsewhere and paste the link.'));
+        Object.assign(d, { fileBase64: await fileB64(file), fileName: file.name, mime: file.type });
+      }
+      await api('content-library', d); modal.close(); toast(tr('نُشر المحتوى', 'Content published'));
+      await refresh(); if (!['course', 'library'].includes(route().name)) location.hash = '#/library';
+    },
+    async profile(f, d) { const r = await api('auth-rbac?action=profile', d); S.user = r.user; save(false); toast(tr('حُفظ الملف التعريفي', 'Profile saved')); await refresh(); },
     async auth(f, d) {
       const res = await api('auth-rbac?action=' + f.dataset.mode, d);
       S.token = res.token; S.user = res.user; S.sub = res.subscription; save(false);
       modal.close(); toast(tr(`أهلاً ${res.user.name}`, `Welcome ${res.user.name}`));
+      if (!location.hash.replace(/^#\/?/, '')) location.hash = '#/home';
       await refresh(); const cb = afterAuth; afterAuth = null; if (cb) cb();
     },
     async link(f, d) {
@@ -662,7 +784,7 @@
   $('#searchForm').addEventListener('submit', e => e.preventDefault());
   $('#q').addEventListener('input', e => {
     R.q = e.target.value.trim();
-    if (!['home', 'free', 'paid', 'paths'].includes(route().name)) location.hash = '#/home'; else render();
+    if (!['home', 'free', 'paid', 'paths', 'library'].includes(route().name)) location.hash = '#/home'; else render();
   });
   $('#currency').addEventListener('change', e => { S.currency = e.target.value; save(false); render(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#assistant').hidden) $('#assistant').hidden = true; });
@@ -670,7 +792,7 @@
   /* ---------- التهيئة ---------- */
   const I18N = {
     skip: ['تخطَّ إلى المحتوى', 'Skip to content'], 'nav.home': ['الرئيسية', 'Home'], 'nav.paid': ['الكورسات المدفوعة (تأهيل وظيفي)', 'Paid courses (job-ready)'],
-    'nav.free': ['المكتبة المجانية (يوتيوب)', 'Free library (YouTube)'], 'nav.paths': ['مسارات التعلم', 'Learning paths'], addLink: ['+ أضف رابط', '+ Add link'],
+    'nav.free': ['المكتبة المجانية (يوتيوب)', 'Free library (YouTube)'], 'nav.paths': ['مسارات التعلم', 'Learning paths'], 'nav.library': ['مكتبة المحتوى', 'Content library'], 'nav.trainers': ['المدربون', 'Trainers'], addLink: ['+ أضف رابط', '+ Add link'],
     'foot.tag': ['تعلّم مجاناً، وتأهّل لسوق العمل في السعودية ومصر.', 'Learn free and get job-ready in Saudi Arabia and Egypt.'], 'nav.platforms': ['بوابة المنصات العالمية', 'Global platforms'],
     'nav.pricing': ['الباقات والاشتراكات', 'Plans & pricing'], 'join.trainee': ['سجّل كمتدرب', 'Join as trainee'], 'join.instructor': ['انضم كمحاضر', 'Join as instructor'], 'join.contractor': ['تسجيل المقاولين B2B', 'Contractors B2B'],
     search: ['ابحث عن كورس، تخصص هندسي، أو أداة ذكاء اصطناعي...', 'Search a course, field or AI tool...']
@@ -687,6 +809,7 @@
   async function refresh() {
     if (ONLINE) {
       try { const d = await api('courses-and-paths'); R.links = d.links || []; R.paidLessons = d.paidLessons || {}; R.wa = d.config?.whatsapp || CONFIG.whatsapp; } catch { /* يعمل بالبيانات المحلية */ }
+      try { R.content = (await api('content-library')).items || []; R.trainers = (await api('auth-rbac?action=instructors')).instructors || []; } catch { /* اختياري */ }
       if (S.token) {
         try {
           const me = await api('auth-rbac?action=me'); S.user = me.user; S.sub = me.subscription;

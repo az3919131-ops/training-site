@@ -16,7 +16,7 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
-# روابط التسجيل المباشر: /join/instructor | /join/trainee | /join/contractor
+# روابط التسجيل المباشر: /join/instructor | /join/teacher | /join/trainee | /join/contractor
 [[redirects]]
   from = "/join/:role"
   to = "/?join=:role"

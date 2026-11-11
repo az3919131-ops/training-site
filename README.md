@@ -9,6 +9,11 @@
 - `src/lib/` — `db.js` (Netlify Blobs مع بديل تلقائي), `http.js`, `notify.js`, `seed.js`.
 - `netlify.toml` — `/api/*`، `/join/:role`، `/verify/:code`، والجدولة.
 
+## الصلاحيات والمحتوى
+- صفحة المقدمة (`/`) للزوار: دخول مباشر وروابط التسجيل حسب الدور؛ المسجَّل يذهب إلى الرئيسية.
+- الأدوار: `admin`، `instructor` (مدرب)، `teacher` (مدرّس)، `contractor_b2b`، `trainee`. المدرب والمدرّس يحتاجان اعتماد المدير.
+- `netlify/functions/content-library.js`: المدير والمدربون المعتمدون يضيفون فيديو / ملفات (حتى 4MB) / روابط / مقالات، مجانية أو للمشتركين، مع ربطها بكورس.
+
 ## التشغيل محلياً
 - افتح `public/index.html` مباشرة (يعمل بـ localStorage بدون خادم)، أو
 - `npm install && node tests/dev-server.mjs` ثم http://localhost:8888 (الواجهة + الدوال بمخزن مؤقت).

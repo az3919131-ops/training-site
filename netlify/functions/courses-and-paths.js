@@ -1,6 +1,6 @@
 // الكورسات المجانية (روابط يوتيوب)، دروس الكورسات المدفوعة، مسارات التعلم، و«خطتي / مراجعاتي»
 import { db } from '../../src/lib/db.js';
-import { json, fail, readBody, action, clean, newId, currentUser, subscriptionOf, hasAccess } from '../../src/lib/http.js';
+import { json, fail, readBody, action, clean, newId, currentUser, subscriptionOf, hasAccess, STAFF } from '../../src/lib/http.js';
 import { notify } from '../../src/lib/notify.js';
 import { SEED, findCourse } from '../../src/lib/seed.js';
 
@@ -11,7 +11,7 @@ export default async req => {
   const act = action(req);
   const me = await currentUser(req);
   const b = req.method === 'POST' ? await readBody(req) : {};
-  const staff = me && ['admin', 'instructor'].includes(me.role);
+  const staff = me && STAFF.includes(me.role);
 
   if (req.method === 'GET' && !act) {
     const [links, extra] = await Promise.all([db.list('free_youtube_courses'), db.list('paid_job_courses')]);

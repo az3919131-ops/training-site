@@ -4,7 +4,8 @@ import { json, fail, readBody, action, clean, adminEmail, signToken, currentUser
   checkAdminPassword, subscriptionOf, publicUser } from '../../src/lib/http.js';
 import { notify } from '../../src/lib/notify.js';
 
-const ROLES = ['trainee', 'instructor', 'contractor_b2b'];
+const ROLES = ['trainee', 'instructor', 'teacher', 'contractor_b2b'];
+const NEEDS_APPROVAL = ['instructor', 'teacher'];
 const validEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
 
 export default async req => {
@@ -17,11 +18,12 @@ export default async req => {
     const wanted = ROLES.includes(b.role) ? b.role : 'trainee';
     if (!validEmail(email) || !name || password.length < 8) return fail(400, 'أدخل الاسم وبريداً صحيحاً وكلمة مرور من 8 أحرف على الأقل.');
     if (email === adminEmail() || await db.get('users', email)) return fail(409, 'هذا البريد مسجل بالفعل، سجّل الدخول.');
-    // دور المحاضر يحتاج اعتماد المدير؛ يبدأ كمتدرب حتى الموافقة
+    // أدوار المدرب والمدرّس تحتاج اعتماد المدير؛ يبدأ الحساب كمتدرب حتى الموافقة
     const user = {
       email, name, phone: clean(b.phone, 30), company: clean(b.company, 120),
-      role: wanted === 'instructor' ? 'trainee' : wanted,
-      requestedRole: wanted === 'instructor' ? 'instructor' : '',
+      role: NEEDS_APPROVAL.includes(wanted) ? 'trainee' : wanted,
+      requestedRole: NEEDS_APPROVAL.includes(wanted) ? wanted : '',
+      specialty: clean(b.specialty, 120),
       pass: hashPassword(password), createdAt: new Date().toISOString()
     };
     await db.set('users', email, user);
@@ -40,6 +42,12 @@ export default async req => {
     return json({ token: await signToken(email), user: publicUser(user), subscription: await subscriptionOf(user) });
   }
 
+  // قائمة المدربين والمدرسين المعتمدين (عامة)
+  if (act === 'instructors') {
+    const users = await db.list('users');
+    return json({ instructors: users.filter(u => NEEDS_APPROVAL.includes(u.role)).map(u => ({ name: u.name, role: u.role, specialty: u.specialty || '', bio: u.bio || '' })) });
+  }
+
   const me = await currentUser(req);
   if (!me) return fail(401, 'سجّل الدخول أولاً.');
 
@@ -47,6 +55,7 @@ export default async req => {
 
   if (act === 'profile' && req.method === 'POST' && me.role !== 'admin') {
     me.name = clean(b.name, 80) || me.name; me.phone = clean(b.phone, 30); me.company = clean(b.company, 120);
+    me.specialty = clean(b.specialty, 120); me.bio = clean(b.bio, 600);
     await db.set('users', me.email, me);
     return json({ user: publicUser(me) });
   }

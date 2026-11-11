@@ -54,4 +54,20 @@ assert.deepEqual(await runRenewal(Date.now() + 31 * 86400000), { due: 1, expired
 assert.deepEqual(await runRenewal(Date.now() + 35 * 86400000), { due: 0, expired: 1 });
 assert.equal((await call(courses, '', null, tok)).paidLessons['sec-pro'][0].url, '');
 assert.ok((await call(auth, '?action=admin', null, admin)).notifications.length >= 6);
+
+// مكتبة المحتوى والصلاحيات
+const content = await load('content-library');
+assert.equal((await call(content, '', { type: 'link', title: 'x', url: 'https://a.b' }, tok)).s, 403);
+await call(auth, '?action=set-role', { email: 't@example.com', role: 'teacher' }, admin);
+assert.equal((await call(auth, '?action=instructors')).instructors.length, 1);
+r = await call(content, '', { type: 'file', title: 'ملف', access: 'paid', fileName: 'boq.xlsx', mime: 'application/x', fileBase64: Buffer.from('hello').toString('base64') }, tok);
+assert.equal(r.item.hasFile, true);
+const cid = r.item.id;
+assert.equal((await call(content, '', { type: 'file', title: 'bad', fileName: 'x.html', fileBase64: 'aGk=' }, tok)).s, 400);
+assert.equal((await call(content, '')).items[0].locked, true);
+assert.equal((await content(new Request('http://x/api?action=file&id=' + cid))).status, 403);
+const fr = await content(new Request('http://x/api?action=file&id=' + cid, { headers: { authorization: 'Bearer ' + tok } }));
+assert.equal(await fr.text(), 'hello');
+assert.equal((await call(content, '?action=delete', { id: cid }, admin)).ok, true);
+assert.equal((await call(content, '')).items.length, 0);
 console.log('✓ smoke tests passed');

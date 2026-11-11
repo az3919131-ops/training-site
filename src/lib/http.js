@@ -9,6 +9,7 @@ export const readBody = async req => { try { return (await req.json()) || {}; } 
 export const action = req => new URL(req.url).searchParams.get('action') || '';
 export const clean = (v, max = 300) => String(v ?? '').replace(/[\u0000-\u001f<>]/g, ' ').trim().slice(0, max);
 export const newId = (p = '') => p + crypto.randomBytes(6).toString('hex');
+export const STAFF = ['admin', 'instructor', 'teacher'];
 export const adminEmail = () => (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 
 async function secret() {
@@ -49,5 +50,5 @@ export async function subscriptionOf(user) {
   if (user.role === 'admin') return { status: 'active', plan: 'admin' };
   return user.subId ? db.get('subscriptions', user.subId) : null;
 }
-export const hasAccess = (user, sub) => !!user && (['admin', 'instructor'].includes(user.role) || ['active', 'renewal_due'].includes(sub?.status));
-export const publicUser = u => u && ({ email: u.email, name: u.name, role: u.role, phone: u.phone || '', company: u.company || '', requestedRole: u.requestedRole || '' });
+export const hasAccess = (user, sub) => !!user && (STAFF.includes(user.role) || ['active', 'renewal_due'].includes(sub?.status));
+export const publicUser = u => u && ({ email: u.email, name: u.name, role: u.role, phone: u.phone || '', company: u.company || '', requestedRole: u.requestedRole || '', specialty: u.specialty || '', bio: u.bio || '' });
