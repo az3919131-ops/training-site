@@ -1,6 +1,6 @@
 // مكتبة المحتوى: المدير والمدربون المعتمدون يضيفون أي محتوى علمي (فيديو، ملفات، روابط، مقالات)
 import { db } from '../../src/lib/db.js';
-import { json, fail, readBody, action, clean, newId, currentUser, subscriptionOf, hasAccess, STAFF } from '../../src/lib/http.js';
+import { json, fail, readBody, action, clean, newId, currentUser, subscriptionOf, hasAccess, can } from '../../src/lib/http.js';
 import { notify } from '../../src/lib/notify.js';
 import { SEED, findCourse } from '../../src/lib/seed.js';
 
@@ -14,7 +14,7 @@ export default async req => {
   const act = action(req), url = new URL(req.url);
   const me = await currentUser(req);
   const open = hasAccess(me, await subscriptionOf(me));
-  const staff = !!me && STAFF.includes(me.role);
+  const staff = can(me, 'content.add');
 
   if (req.method === 'GET' && act === 'file') {
     const it = await db.get('content_library', clean(url.searchParams.get('id'), 60));
@@ -37,7 +37,7 @@ export default async req => {
     }) });
   }
 
-  if (!staff) return fail(403, 'إضافة المحتوى للمدير والمدربين المعتمدين فقط.');
+  if (!staff) return fail(403, 'لا تملك صلاحية إضافة المحتوى.');
   const b = await readBody(req);
 
   if (act === 'delete') {

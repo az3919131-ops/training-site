@@ -10,6 +10,11 @@ export const action = req => new URL(req.url).searchParams.get('action') || '';
 export const clean = (v, max = 300) => String(v ?? '').replace(/[\u0000-\u001f<>]/g, ' ').trim().slice(0, max);
 export const newId = (p = '') => p + crypto.randomBytes(6).toString('hex');
 export const STAFF = ['admin', 'instructor', 'teacher'];
+// محفظة الصلاحيات: المدير يملكها كلها ويوزعها على الأعضاء (افتراضياً حسب الدور، أو تخصيصاً لكل مستخدم)
+export const PERMS = ['content.add', 'lessons.add', 'links.approve', 'bookings.manage', 'subs.manage', 'paid.access'];
+const ROLE_PERMS = { instructor: ['content.add', 'lessons.add', 'paid.access'], teacher: ['content.add', 'lessons.add', 'paid.access'] };
+export const permsOf = u => (!u ? [] : u.role === 'admin' ? PERMS : Array.isArray(u.perms) ? u.perms.filter(p => PERMS.includes(p)) : ROLE_PERMS[u.role] || []);
+export const can = (u, p) => permsOf(u).includes(p);
 export const adminEmail = () => (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
 
 async function secret() {
@@ -33,7 +38,8 @@ export async function currentUser(req) {
   let d; try { d = JSON.parse(Buffer.from(p, 'base64url').toString()); } catch { return null; }
   if (!d.e || d.x < Date.now()) return null;
   if (d.e === adminEmail()) return { email: d.e, name: 'مدير المنصة', role: 'admin' };
-  return db.get('users', d.e);
+  const u = await db.get('users', d.e);
+  return u && !u.suspended ? u : null;
 }
 export function hashPassword(pw) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -50,5 +56,5 @@ export async function subscriptionOf(user) {
   if (user.role === 'admin') return { status: 'active', plan: 'admin' };
   return user.subId ? db.get('subscriptions', user.subId) : null;
 }
-export const hasAccess = (user, sub) => !!user && (STAFF.includes(user.role) || ['active', 'renewal_due'].includes(sub?.status));
-export const publicUser = u => u && ({ email: u.email, name: u.name, role: u.role, phone: u.phone || '', company: u.company || '', requestedRole: u.requestedRole || '', specialty: u.specialty || '', bio: u.bio || '' });
+export const hasAccess = (user, sub) => !!user && (can(user, 'paid.access') || ['active', 'renewal_due'].includes(sub?.status));
+export const publicUser = u => u && ({ email: u.email, name: u.name, role: u.role, phone: u.phone || '', company: u.company || '', requestedRole: u.requestedRole || '', specialty: u.specialty || '', bio: u.bio || '', perms: permsOf(u), customPerms: Array.isArray(u.perms), suspended: !!u.suspended });

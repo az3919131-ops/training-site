@@ -1,6 +1,6 @@
 // الكورسات المجانية (روابط يوتيوب)، دروس الكورسات المدفوعة، مسارات التعلم، و«خطتي / مراجعاتي»
 import { db } from '../../src/lib/db.js';
-import { json, fail, readBody, action, clean, newId, currentUser, subscriptionOf, hasAccess, STAFF } from '../../src/lib/http.js';
+import { json, fail, readBody, action, clean, newId, currentUser, subscriptionOf, hasAccess, can } from '../../src/lib/http.js';
 import { notify } from '../../src/lib/notify.js';
 import { SEED, findCourse } from '../../src/lib/seed.js';
 
@@ -11,7 +11,7 @@ export default async req => {
   const act = action(req);
   const me = await currentUser(req);
   const b = req.method === 'POST' ? await readBody(req) : {};
-  const staff = me && STAFF.includes(me.role);
+  const staff = can(me, 'lessons.add');
 
   if (req.method === 'GET' && !act) {
     const [links, extra] = await Promise.all([db.list('free_youtube_courses'), db.list('paid_job_courses')]);
@@ -52,7 +52,7 @@ export default async req => {
       id: newId('link-'), url, title, desc: clean(b.desc, 400),
       cat: CATS.includes(b.cat) ? b.cat : 'ai',
       pathId: SEED.paths.some(p => p.id === b.pathId) ? b.pathId : '',
-      owner: me.email, ownerName: me.name, approved: staff, createdAt: new Date().toISOString()
+      owner: me.email, ownerName: me.name, approved: can(me, 'links.approve'), createdAt: new Date().toISOString()
     };
     await db.set('free_youtube_courses', link.id, link);
     if (link.pathId) {
@@ -70,7 +70,7 @@ export default async req => {
     return json({ ok: true });
   }
   if (act === 'approve-link' && req.method === 'POST') {
-    if (me.role !== 'admin') return fail(403, 'للمدير فقط.');
+    if (!can(me, 'links.approve')) return fail(403, 'لا تملك صلاحية اعتماد الروابط.');
     const l = await db.get('free_youtube_courses', clean(b.id, 60));
     if (!l) return fail(404, 'الرابط غير موجود.');
     l.approved = !!b.approved; await db.set('free_youtube_courses', l.id, l);

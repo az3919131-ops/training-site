@@ -1,7 +1,8 @@
 // حجز الجلسات الاستشارية بالساعة أو بالدقيقة
 import { db } from '../../src/lib/db.js';
-import { json, fail, readBody, action, clean, newId, currentUser, subscriptionOf } from '../../src/lib/http.js';
+import { json, fail, readBody, action, clean, newId, currentUser, subscriptionOf, can } from '../../src/lib/http.js';
 import { notify } from '../../src/lib/notify.js';
+import { settings, addEntry, PLATFORM } from '../../src/lib/wallet.js';
 import { SEED, findCourse } from '../../src/lib/seed.js';
 
 const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
@@ -20,15 +21,26 @@ export default async req => {
   if (req.method === 'GET') {
     if (!me) return fail(401, 'سجّل الدخول أولاً.');
     const all = await db.list('hourly_bookings');
-    const list = me.role === 'admin' ? all : all.filter(x => x.email === me.email);
+    const list = can(me, 'bookings.manage') ? all : all.filter(x => x.email === me.email || x.trainerEmail === me.email);
     return json({ bookings: list.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)) });
   }
 
   const b = await readBody(req);
   if (act === 'status') {
-    if (me?.role !== 'admin') return fail(403, 'للمدير فقط.');
+    if (!can(me, 'bookings.manage')) return fail(403, 'لا تملك صلاحية إدارة الحجوزات.');
     const bk = await db.get('hourly_bookings', clean(b.id, 60));
     if (!bk || !['confirmed', 'cancelled', 'done'].includes(b.status)) return fail(400, 'طلب غير صحيح.');
+    if (b.trainerEmail !== undefined) {
+      const t = b.trainerEmail && await db.get('users', clean(b.trainerEmail, 120).toLowerCase());
+      bk.trainerEmail = t ? t.email : ''; bk.trainerName = t ? t.name : '';
+    }
+    // عند إتمام الجلسة: مستحق المدرب بعد خصم نسبة المنصة (مرة واحدة)
+    if (b.status === 'done' && !bk.settled) {
+      const { commissionTrainer } = await settings(), fee = bk.trainerEmail ? bk.priceSAR * commissionTrainer / 100 : bk.priceSAR;
+      if (bk.trainerEmail) await addEntry(bk.trainerEmail, 'earning', bk.priceSAR - fee, `جلسة استشارية مع ${bk.name} (${bk.date})`, bk.id);
+      await addEntry(PLATFORM, 'commission', fee, bk.trainerEmail ? `نسبة المنصة ${commissionTrainer}% من جلسة ${bk.trainerName}` : `جلسة استشارية بدون مدرب محدد (${bk.name})`, bk.id);
+      bk.settled = true;
+    }
     bk.status = b.status; await db.set('hourly_bookings', bk.id, bk);
     return json({ booking: bk });
   }

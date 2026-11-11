@@ -70,4 +70,30 @@ const fr = await content(new Request('http://x/api?action=file&id=' + cid, { hea
 assert.equal(await fr.text(), 'hello');
 assert.equal((await call(content, '?action=delete', { id: cid }, admin)).ok, true);
 assert.equal((await call(content, '')).items.length, 0);
+
+// إدارة المستخدمين، الصلاحيات، المحافظ والعمولات
+const adm = await load('admin-users');
+assert.equal((await call(adm, '', null, tok)).s, 403);
+r = await call(adm, '', null, admin);
+assert.equal(r.platform, 44.7); assert.equal(r.pool, 104.3);                 // 30% من اشتراك 149
+await call(adm, '?action=settings', { commissionTrainer: 25, commissionTrainee: 30 }, admin);
+r = await call(adm, '?action=create', { name: 'Trainer', email: 'tr@example.com', password: 'password1', role: 'instructor' }, admin);
+assert.deepEqual(r.user.perms, ['content.add', 'lessons.add', 'paid.access']);
+const ttok = (await call(auth, '?action=login', { email: 'tr@example.com', password: 'password1' })).token;
+await call(adm, '?action=update', { email: 'tr@example.com', perms: ['bookings.manage'] }, admin);
+assert.equal((await call(content, '', { type: 'link', title: 'x', url: 'https://a.b' }, ttok)).s, 403);  // سُحبت الصلاحية
+r = await call(booking, '', null, ttok); const bid = r.bookings[0].id;        // مُنحت إدارة الحجوزات
+await call(booking, '?action=status', { id: bid, status: 'done', trainerEmail: 'tr@example.com' }, admin);
+await call(booking, '?action=status', { id: bid, status: 'done' }, admin);    // لا تتكرر التسوية
+assert.equal((await call(adm, '?action=wallet', null, ttok)).balance, 120);   // 160 - 25%
+await call(adm, '?action=ledger', { email: 'tr@example.com', type: 'payout', amountSAR: 100 }, admin);
+assert.equal((await call(adm, '?action=wallet', null, ttok)).balance, 20);
+assert.equal((await call(adm, '?action=wallet', null, admin)).balance, 84.7);
+await call(adm, '?action=grant-sub', { email: 'tr@example.com', plan: 'all-access', days: 7 }, admin);
+assert.equal((await call(auth, '?action=me', null, ttok)).subscription.status, 'active');
+await call(adm, '?action=update', { email: 'tr@example.com', suspended: true }, admin);
+assert.equal((await call(auth, '?action=me', null, ttok)).s, 401);
+assert.equal((await call(auth, '?action=login', { email: 'tr@example.com', password: 'password1' })).s, 403);
+await call(adm, '?action=delete', { email: 'tr@example.com' }, admin);
+assert.equal((await call(adm, '', null, admin)).users.some(u => u.email === 'tr@example.com'), false);
 console.log('✓ smoke tests passed');

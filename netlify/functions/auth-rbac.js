@@ -1,7 +1,7 @@
 // التسجيل والدخول والصلاحيات (admin / instructor / contractor_b2b / trainee) وحالة الاشتراك
 import { db } from '../../src/lib/db.js';
 import { json, fail, readBody, action, clean, adminEmail, signToken, currentUser, hashPassword, verifyPassword,
-  checkAdminPassword, subscriptionOf, publicUser } from '../../src/lib/http.js';
+  checkAdminPassword, subscriptionOf, publicUser, PERMS } from '../../src/lib/http.js';
 import { notify } from '../../src/lib/notify.js';
 
 const ROLES = ['trainee', 'instructor', 'teacher', 'contractor_b2b'];
@@ -35,10 +35,11 @@ export default async req => {
     const email = clean(b.email, 120).toLowerCase(), password = String(b.password || '');
     if (email && email === adminEmail()) {
       if (!checkAdminPassword(password)) return fail(401, 'بيانات الدخول غير صحيحة.');
-      return json({ token: await signToken(email), user: { email, name: 'مدير المنصة', role: 'admin' }, subscription: { status: 'active', plan: 'admin' } });
+      return json({ token: await signToken(email), user: { email, name: 'مدير المنصة', role: 'admin', perms: PERMS }, subscription: { status: 'active', plan: 'admin' } });
     }
     const user = await db.get('users', email);
     if (!user || !verifyPassword(password, user.pass)) return fail(401, 'بيانات الدخول غير صحيحة.');
+    if (user.suspended) return fail(403, 'هذا الحساب موقوف. تواصل مع إدارة المنصة.');
     return json({ token: await signToken(email), user: publicUser(user), subscription: await subscriptionOf(user) });
   }
 
@@ -72,7 +73,7 @@ export default async req => {
   if (act === 'set-role' && req.method === 'POST') {
     const u = await db.get('users', clean(b.email, 120).toLowerCase());
     if (!u || !ROLES.includes(b.role)) return fail(400, 'مستخدم أو دور غير صحيح.');
-    u.role = b.role; u.requestedRole = '';
+    u.role = b.role; u.requestedRole = ''; delete u.perms;
     await db.set('users', u.email, u);
     return json({ user: publicUser(u) });
   }

@@ -319,3 +319,6 @@ form.f { display: grid; gap: 14px; }
   .fab { left: 16px; bottom: 16px; } .assistant { left: 16px; bottom: 88px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+.mainnav a[hidden] { display: none; }
+.mainnav a[data-admin] { color: var(--orange); }

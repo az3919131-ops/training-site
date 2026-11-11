@@ -78,8 +78,9 @@
   });
   const course = id => [...freeAll(), ...paidAll()].find(c => c.id === id);
   const STAFF = ['admin', 'instructor', 'teacher'];
-  const hasAccess = () => !!S.user && (STAFF.includes(S.user.role) || ['active', 'renewal_due'].includes(S.sub?.status));
-  const isStaff = () => !!S.user && STAFF.includes(S.user.role);
+  const can = p => !!S.user && (S.user.role === 'admin' || (S.user.perms || []).includes(p));
+  const hasAccess = () => !!S.user && (can('paid.access') || ['active', 'renewal_due'].includes(S.sub?.status));
+  const isStaff = () => can('content.add');
   const doneOf = c => (S.progress[c.id]?.done || []).filter(i => i < c.lessons.length);
   const pct = c => (c.lessons.length ? Math.round(doneOf(c).length / c.lessons.length * 100) : 0);
   const match = c => (R.cat === 'all' || c.cat === R.cat || (c.cats || []).includes(R.cat)) &&
@@ -253,9 +254,9 @@
           <ol class="lessons">${c.lessons.map((l, i) => `<li>
             <button class="lesson" data-act="lesson" data-id="${esc(c.id)}" data-i="${i}" aria-current="${i === play}"><span class="n">${l.locked ? '🔒' : i + 1}</span><span>${esc(l.t)}</span></button>
             ${l.locked ? '' : `<button class="check" data-act="done" data-id="${esc(c.id)}" data-i="${i}" aria-pressed="${done.includes(i)}" aria-label="${tr('تم إنهاء الدرس', 'Mark lesson done')}" title="${tr('تم إنهاء الدرس', 'Mark done')}">✓</button>`}
-            ${l.id && isStaff() ? `<button class="check" data-act="del-lesson" data-id="${esc(c.id)}" data-lid="${esc(l.id)}" aria-label="${tr('حذف الدرس', 'Delete lesson')}">✕</button>` : ''}
+            ${l.id && can('lessons.add') ? `<button class="check" data-act="del-lesson" data-id="${esc(c.id)}" data-lid="${esc(l.id)}" aria-label="${tr('حذف الدرس', 'Delete lesson')}">✕</button>` : ''}
           </li>`).join('')}</ol>
-          ${paid && isStaff() ? `<form class="f" data-form="lesson" data-id="${esc(c.id)}" style="margin-block-start:16px"><div class="cols">
+          ${paid && can('lessons.add') ? `<form class="f" data-form="lesson" data-id="${esc(c.id)}" style="margin-block-start:16px"><div class="cols">
             <label>${tr('عنوان الدرس', 'Lesson title')}<input name="title" required maxlength="140"></label>
             <label>${tr('رابط الفيديو (يوتيوب غير مدرج)', 'Video URL')}<input name="url" type="url" required dir="ltr"></label></div>
             <p class="err" role="alert"></p><button class="btn soft sm">${tr('+ أضف درساً للدبلوم', '+ Add lesson')}</button></form>` : ''}
@@ -403,7 +404,11 @@
             : `<p class="muted">${tr('أنت على الباقة المجانية.', 'You are on the free plan.')}</p><div class="tabs"><a class="btn gold sm" href="#/pricing">${tr('عرض الباقات', 'See plans')}</a></div>`}
         </section>
       </div>
-      ${isStaff() ? `<section class="panel"><h2>${tr('لوحة المدرب', 'Trainer panel')}</h2>
+      <section class="panel"><h2>${tr('محفظتي', 'My wallet')} ${R.wallet ? `<span class="badge paid">${R.wallet.balance.toLocaleString('en')} ${tr('ر.س', 'SAR')}</span>` : ''}</h2>
+        <p class="small muted">${u.role === 'admin' ? tr('إيراد المنصة من نسب الاشتراكات والجلسات.', 'Platform revenue from commissions.') : tr('مستحقاتك من الجلسات والاشتراكات بعد خصم نسبة المنصة، وسجل مدفوعاتك.', 'Your earnings after platform commission, and your payments.')}</p>
+        <div class="rows" style="margin-block-start:12px">${R.wallet?.entries.length ? R.wallet.entries.slice(0, 15).map(ledgerRow).join('') : `<p class="muted">${tr('لا توجد حركات بعد.', 'No transactions yet.')}</p>`}</div>
+        ${u.role === 'admin' ? `<div class="tabs"><a class="btn gold sm" href="#/admin">${tr('إدارة المستخدمين والصلاحيات والعمولات', 'Manage users, permissions & commissions')}</a></div>` : ''}</section>
+      ${STAFF.includes(u.role) || isStaff() ? `<section class="panel"><h2>${tr('لوحة المدرب', 'Trainer panel')}</h2>
         <div class="tabs" style="margin-block:0 16px"><button class="btn gold sm" data-act="add-content">${tr('+ أضف محتوى (فيديو / ملف / مقال)', '+ Add content')}</button><a class="btn soft sm" href="#/library">${tr('إدارة مكتبة المحتوى', 'Manage library')}</a><a class="btn soft sm" href="#/paid">${tr('إضافة دروس للدبلومات', 'Add diploma lessons')}</a></div>
         ${u.role === 'admin' ? '' : `<form class="f" data-form="profile" novalidate><div class="cols">
           <label>${tr('الاسم', 'Name')}<input name="name" required value="${esc(u.name)}"></label>
@@ -416,7 +421,7 @@
   const subMsg = s => `مرحباً، أرغب في تفعيل اشتراك «${s.planTitle}» (${s.cycle === 'yearly' ? 'سنوي' : 'شهري'}) في منصة التزام التدريب.\nالاسم: ${S.user?.name || ''}\nالبريد: ${S.user?.email || ''}\nالمبلغ: ${money(s.amountSAR)}`;
 
   function adminPanel() {
-    const a = R.admin, tabs = [['subs', tr('الاشتراكات', 'Subscriptions')], ['bookings', tr('الحجوزات', 'Bookings')], ['links', tr('الروابط', 'Links')], ['users', tr('المستخدمون', 'Users')], ['notes', tr('سجل الإشعارات', 'Notifications')]];
+    const a = R.admin, tabs = [['subs', tr('الاشتراكات', 'Subscriptions')], ['bookings', tr('الحجوزات', 'Bookings')], ['links', tr('الروابط', 'Links')], ['notes', tr('سجل الإشعارات', 'Notifications')]];
     let body = `<p class="muted">${tr('جارٍ التحميل…', 'Loading…')}</p>`;
     if (a) {
       const none = `<p class="muted">${tr('لا يوجد شيء هنا بعد.', 'Nothing here yet.')}</p>`;
@@ -424,12 +429,10 @@
         subs: () => a.subs.map(s => `<div class="row"><div class="grow"><strong>${esc(s.name)}</strong> — ${esc(s.planTitle)} (${s.cycle === 'yearly' ? tr('سنوي', 'Yearly') : tr('شهري', 'Monthly')})<div class="small muted" dir="ltr" style="text-align:start">${esc(s.email)} · ${esc(s.phone || '')} · ${s.amountSAR} SAR</div></div>
           <span class="status ${esc(s.status)}">${statusText(s.status)}</span><button class="btn primary sm" data-act="adm-activate" data-id="${esc(s.id)}">${s.status === 'active' ? tr('تمديد', 'Extend') : tr('تفعيل', 'Activate')}</button></div>`),
         bookings: () => a.bookings.map(b => `<div class="row"><div class="grow"><strong>${esc(b.name)}</strong> — ${esc(b.courseTitle)}<div class="small muted">${esc(b.date)} ${esc(b.time)} · ${b.minutes} ${tr('دقيقة', 'min')} · ${b.priceSAR} SAR · <span dir="ltr">${esc(b.phone)}</span></div>${b.notes ? `<p class="small">${esc(b.notes)}</p>` : ''}</div>
-          <span class="status ${esc(b.status)}">${statusText(b.status)}</span><button class="btn primary sm" data-act="adm-booking" data-id="${esc(b.id)}" data-s="confirmed">${tr('تأكيد', 'Confirm')}</button><button class="btn danger sm" data-act="adm-booking" data-id="${esc(b.id)}" data-s="cancelled">${tr('إلغاء', 'Cancel')}</button></div>`),
+          <span class="status ${esc(b.status)}">${statusText(b.status)}</span><select class="pick" id="tr-${esc(b.id)}" aria-label="${tr('المدرب', 'Trainer')}"><option value="">${tr('— المدرب —', '— Trainer —')}</option>${a.users.filter(u => STAFF.includes(u.role)).map(u => `<option value="${esc(u.email)}" ${u.email === b.trainerEmail ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}</select>
+          <button class="btn primary sm" data-act="adm-booking" data-id="${esc(b.id)}" data-s="confirmed">${tr('تأكيد', 'Confirm')}</button>${b.settled ? '' : `<button class="btn gold sm" data-act="adm-booking" data-id="${esc(b.id)}" data-s="done">${tr('تمت واحتسب العمولة', 'Done & settle')}</button>`}<button class="btn danger sm" data-act="adm-booking" data-id="${esc(b.id)}" data-s="cancelled">${tr('إلغاء', 'Cancel')}</button></div>`),
         links: () => R.links.map(l => `<div class="row"><div class="grow"><strong>${esc(l.title)}</strong><div class="small muted" dir="ltr" style="text-align:start">${esc(l.url)} · ${esc(l.owner)}</div></div>
           <span class="status ${l.approved ? 'active' : 'pending'}">${l.approved ? tr('معتمد', 'Approved') : tr('خاص بصاحبه', 'Private')}</span><button class="btn primary sm" data-act="adm-link" data-id="${esc(l.id)}" data-s="${l.approved ? '' : '1'}">${l.approved ? tr('إلغاء الاعتماد', 'Unapprove') : tr('اعتماد للجميع', 'Approve')}</button></div>`),
-        users: () => a.users.map(u => `<div class="row"><div class="grow"><strong>${esc(u.name)}</strong> <span class="badge">${esc(u.role)}</span><div class="small muted" dir="ltr" style="text-align:start">${esc(u.email)} · ${esc(u.phone)}</div></div>
-          ${u.requestedRole ? `<button class="btn primary sm" data-act="adm-role" data-id="${esc(u.email)}" data-s="${esc(u.requestedRole)}">${tr('اعتماد طلب', 'Approve')} ${esc(u.requestedRole)}</button>` : ''}
-          <select class="pick" data-change="adm-role" data-id="${esc(u.email)}" aria-label="${tr('تغيير الصلاحية', 'Change role')}">${['trainee', 'instructor', 'teacher', 'contractor_b2b'].map(r => `<option ${r === u.role ? 'selected' : ''}>${r}</option>`).join('')}</select></div>`),
         notes: () => a.notes.map(n => `<div class="row"><div class="grow"><strong>${esc(n.title)}</strong><div class="small muted">${new Date(n.at).toLocaleString(S.lang === 'en' ? 'en' : 'ar-EG')}</div><p class="small">${esc(Object.entries(n.data).map(([k, v]) => `${k}: ${v}`).join(' · '))}</p></div></div>`)
       }[R.adminTab]().join('') || none;
     }
@@ -438,11 +441,61 @@
   }
   async function loadAdmin() {
     try {
-      const [o, s, b] = await Promise.all([api('auth-rbac?action=admin'), api('subscription-manager?action=all'), api('booking-engine')]);
-      R.admin = { users: o.users, notes: o.notifications, subs: s.subscriptions, bookings: b.bookings };
+      const [o, s, b, m] = await Promise.all([api('auth-rbac?action=admin'), api('subscription-manager?action=all'), api('booking-engine'), api('admin-users')]);
+      R.adm = m;
+      R.admin = { users: m.users, notes: o.notifications, subs: s.subscriptions, bookings: b.bookings };
     } catch (e) { toast(e.message); R.admin = { users: [], notes: [], subs: [], bookings: [] }; }
-    if (route().name === 'account') render();
+    if (['account', 'admin'].includes(route().name)) render();
   }
+
+  /* ---------- صفحة إدارة المستخدمين (مدير النظام) ---------- */
+  const PERM = () => ({ 'content.add': tr('إضافة محتوى (فيديو/ملفات/مقالات)', 'Add content'), 'lessons.add': tr('إضافة دروس للدبلومات', 'Add diploma lessons'), 'links.approve': tr('اعتماد روابط المتدربين', 'Approve links'),
+    'bookings.manage': tr('إدارة الحجوزات والجلسات', 'Manage bookings'), 'subs.manage': tr('تفعيل الاشتراكات', 'Activate subscriptions'), 'paid.access': tr('دخول مجاني لكل الدبلومات', 'Free access to diplomas') });
+  const ROLE = () => ({ trainee: tr('متدرب', 'Trainee'), instructor: tr('مدرب', 'Trainer'), teacher: tr('مدرّس', 'Teacher'), contractor_b2b: tr('مقاول B2B', 'Contractor') });
+  const sar = n => `${(+n || 0).toLocaleString('en')} ${tr('ر.س', 'SAR')}`;
+  const ledgerRow = e => `<div class="row"><div class="grow">${esc(e.note)}<div class="small muted">${new Date(e.at).toLocaleString(S.lang === 'en' ? 'en' : 'ar-EG')}${e.account && R.adm && route().name === 'admin' ? ` · <span dir="ltr">${esc(e.account)}</span>` : ''}</div></div>
+    <strong dir="ltr" style="color:var(--${e.type === 'payment' ? 'muted' : e.amountSAR < 0 ? 'danger' : 'ok'})">${e.type === 'payment' ? '' : e.amountSAR > 0 ? '+' : ''}${e.amountSAR.toLocaleString('en')}</strong></div>`;
+  function adminPage() {
+    if (S.user?.role !== 'admin') return `<div class="wrap page"><div class="empty">${tr('هذه الصفحة لمدير النظام فقط.', 'Admins only.')}<br><a class="btn soft sm" href="#/account">${tr('حسابي', 'Account')}</a></div></div>`;
+    const m = R.adm;
+    if (!m) return `<div class="wrap page"><h1>${tr('إدارة المستخدمين', 'User management')}</h1><p class="muted">${tr('جارٍ التحميل…', 'Loading…')}</p></div>`;
+    const q = (R.uq || '').toLowerCase(), list = m.users.filter(u => (!R.urole || u.role === R.urole) && (!q || (u.name + u.email + u.phone).toLowerCase().includes(q)));
+    return `<div class="wrap page"><h1>${tr('إدارة المستخدمين', 'User management')}</h1>
+      <p class="muted">${tr('أنت مدير النظام: تملك كل الصلاحيات وتوزعها على المدربين والمتدربين، وتحدد نسبة المنصة.', 'You are the system admin: you hold all permissions and delegate them.')}</p>
+      <div class="kpis" style="margin-block:24px">
+        <div class="kpi"><b>${m.users.length}</b><span>${tr('عضو', 'Members')}</span></div>
+        <div class="kpi"><b>${m.users.filter(u => STAFF.includes(u.role)).length}</b><span>${tr('مدرب ومدرّس', 'Trainers')}</span></div>
+        <div class="kpi"><b>${m.users.filter(u => u.sub?.status === 'active').length}</b><span>${tr('اشتراك فعّال', 'Active subscriptions')}</span></div>
+        <div class="kpi"><b>${sar(m.platform)}</b><span>${tr('محفظة المنصة (نسبتك)', 'Platform wallet')}</span></div>
+        <div class="kpi"><b>${sar(m.pool)}</b><span>${tr('رصيد المدربين غير الموزّع', 'Undistributed trainer pool')}</span></div></div>
+      <div class="two" style="margin:0">
+        <form class="panel f" style="margin:0" data-form="commission" novalidate><h2>${tr('نسبة المنصة (العمولة)', 'Platform commission')}</h2>
+          <div class="cols"><label>${tr('من اشتراكات المتدربين %', 'From trainee subscriptions %')}<input name="commissionTrainee" type="number" min="0" max="100" value="${m.settings.commissionTrainee}"></label>
+          <label>${tr('من جلسات المدربين %', 'From trainer sessions %')}<input name="commissionTrainer" type="number" min="0" max="100" value="${m.settings.commissionTrainer}"></label></div>
+          <p class="small muted">${tr('تُطبَّق على كل اشتراك تفعّله وكل جلسة تُعلَّم «تمت». الباقي يذهب لمحفظة المدرب أو لرصيد المدربين.', 'Applied on each activated subscription and each completed session.')}</p>
+          <p class="err" role="alert"></p><button class="btn primary sm">${tr('حفظ النسب', 'Save rates')}</button></form>
+        <section class="panel" style="margin:0"><h2>${tr('آخر الحركات المالية', 'Recent transactions')}</h2>
+          <div class="rows" style="margin:0;max-height:260px;overflow:auto">${m.ledger.length ? m.ledger.slice(0, 30).map(ledgerRow).join('') : `<p class="muted">${tr('لا توجد حركات بعد.', 'No transactions yet.')}</p>`}</div>
+          <div class="tabs"><button class="btn soft sm" data-act="u-wallet" data-id="trainers_pool">${tr('توزيع / صرف من رصيد المدربين', 'Distribute trainer pool')}</button></div></section>
+      </div>
+      <div class="tabs" style="align-items:center">
+        <button class="btn gold sm" data-act="u-create">${tr('+ أضف مستخدماً', '+ Add user')}</button>
+        <input class="pick" id="uq" type="search" placeholder="${tr('ابحث بالاسم أو البريد…', 'Search name or email…')}" value="${esc(R.uq || '')}" style="flex:1;min-width:180px;font-weight:400">
+        <select class="pick" data-change="u-filter" aria-label="${tr('تصفية بالدور', 'Filter by role')}"><option value="">${tr('كل الأدوار', 'All roles')}</option>${Object.entries(ROLE()).map(([k, v]) => `<option value="${k}" ${R.urole === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      <div class="rows">${list.length ? list.map(u => `<div class="row"><div class="grow"><strong>${esc(u.name)}</strong> <span class="badge mine">${ROLE()[u.role] || esc(u.role)}</span>
+          ${u.suspended ? `<span class="status expired">${tr('موقوف', 'Suspended')}</span>` : ''}${u.requestedRole ? `<span class="status pending">${tr('يطلب', 'Requests')}: ${ROLE()[u.requestedRole]}</span>` : ''}${u.sub ? `<span class="status ${esc(u.sub.status)}">${esc(u.sub.planTitle)} · ${statusText(u.sub.status)}</span>` : ''}
+          <div class="small muted" dir="ltr" style="text-align:start">${esc(u.email)}${u.phone ? ' · ' + esc(u.phone) : ''}</div>
+          <div class="small muted">${tr('الصلاحيات', 'Permissions')}: ${u.perms.length ? u.perms.map(p => PERM()[p]).join('، ') : tr('أساسية فقط', 'basic only')}${u.customPerms ? ` (${tr('مخصصة', 'custom')})` : ''} · ${tr('المحفظة', 'Wallet')}: ${sar(u.balance)} · ${tr('دفع', 'Paid')}: ${sar(u.paid)}</div></div>
+        <div class="acts">${u.requestedRole ? `<button class="btn gold sm" data-act="u-role" data-id="${esc(u.email)}" data-s="${esc(u.requestedRole)}">${tr('اعتماد الطلب', 'Approve')}</button>` : ''}
+          <select class="pick" data-change="u-role" data-id="${esc(u.email)}" aria-label="${tr('الدور', 'Role')}">${Object.entries(ROLE()).map(([k, v]) => `<option value="${k}" ${k === u.role ? 'selected' : ''}>${v}</option>`).join('')}</select>
+          <button class="btn soft sm" data-act="u-perms" data-id="${esc(u.email)}">${tr('الصلاحيات', 'Permissions')}</button>
+          <button class="btn soft sm" data-act="u-sub" data-id="${esc(u.email)}">${tr('منح اشتراك', 'Grant plan')}</button>
+          <button class="btn soft sm" data-act="u-wallet" data-id="${esc(u.email)}">${tr('المحفظة', 'Wallet')}</button>
+          <button class="btn soft sm" data-act="u-suspend" data-id="${esc(u.email)}" data-s="${u.suspended ? '' : '1'}">${u.suspended ? tr('إعادة تفعيل', 'Reactivate') : tr('إيقاف', 'Suspend')}</button>
+          <button class="btn danger sm" data-act="u-delete" data-id="${esc(u.email)}">${tr('حذف', 'Delete')}</button></div></div>`).join('') : `<div class="empty">${tr('لا يوجد مستخدمون مطابقون.', 'No matching users.')}</div>`}</div></div>`;
+  }
+  const admUser = email => R.adm?.users.find(u => u.email === email);
+  async function admDo(path, body, msg) { try { await api('admin-users?action=' + path, body); if (msg) toast(msg); if (modal.open) modal.close(); await loadAdmin(); refresh(); } catch (e) { toast(e.message); } }
 
   const settingsPage = () => `<div class="wrap page"><h1>${tr('الإعدادات', 'Settings')}</h1>
     <div class="two">
@@ -479,7 +532,7 @@
       free: () => filters() + freeSec() + creator(),
       paid: () => filters() + paidSec() + pricingSec(),
       paths: () => filters() + pathsSec() + creator(),
-      welcome: welcomePage, library: libraryPage, trainers: trainersPage,
+      welcome: welcomePage, library: libraryPage, trainers: trainersPage, admin: adminPage,
       platforms: platformsSec, pricing: pricingSec, plan: planPage, reviews: reviewsPage, account: accountPage, settings: settingsPage,
       course: () => coursePage(arg), verify: () => verifyPage(arg)
     };
@@ -487,7 +540,9 @@
     $('#main').innerHTML = (views[name] || views.home)();
     $$('[data-nav]').forEach(a => a.dataset.nav === name ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
     badge();
-    if (name === 'account' && S.user?.role === 'admin' && !R.admin) loadAdmin();
+    $$('[data-admin]').forEach(a => { a.hidden = S.user?.role !== 'admin'; });
+    if (['account', 'admin'].includes(name) && S.user?.role === 'admin' && !R.admin) loadAdmin();
+    if (name === 'account' && S.user && ONLINE && !R.wallet && !R.walletBusy) { R.walletBusy = true; api('admin-users?action=wallet').then(w => { R.wallet = w; if (route().name === 'account') render(); }).catch(() => {}).finally(() => { R.walletBusy = false; }); }
   }
   window.addEventListener('hashchange', () => { if (route().name !== 'course') R.playing = null; render(); window.scrollTo(0, 0); $('#main').focus({ preventScroll: true }); });
 
@@ -682,7 +737,7 @@
     'del-review': el => { S.reviews = S.reviews.filter(r => r.id !== el.dataset.id); save(); render(); },
     subscribe: el => subscribe(el.dataset.id),
     auth: el => authModal(el.dataset.id),
-    logout: () => { S.token = ''; S.user = null; S.sub = null; R.admin = null; save(false); toast(tr('تم تسجيل الخروج', 'Logged out')); refresh(); },
+    logout: () => { S.token = ''; S.user = null; S.sub = null; R.admin = null; R.adm = null; R.wallet = null; save(false); toast(tr('تم تسجيل الخروج', 'Logged out')); refresh(); },
     'cancel-sub': async () => { if (!confirm(tr('تأكيد إلغاء الاشتراك؟', 'Cancel subscription?'))) return; try { S.sub = (await api('subscription-manager?action=cancel', {})).subscription; save(false); render(); } catch (e) { toast(e.message); } },
     lang: () => { S.lang = S.lang === 'ar' ? 'en' : 'ar'; save(false); applyPrefs(); render(); },
     theme: () => { const dark = document.documentElement.dataset.theme === 'dark'; S.theme = dark ? 'light' : 'dark'; save(false); applyPrefs(); },
@@ -709,9 +764,39 @@
       } catch (e) { toast(e.message); }
     },
     'show-cert': el => { const c = S.certs.find(x => x.code === el.dataset.id); if (c) certModal(c); },
+    'u-filter': el => { R.urole = el.value; render(); },
+    'u-role': el => admDo('update', { email: el.dataset.id, role: el.dataset.s || el.value }, tr('تم تحديث الدور', 'Role updated')),
+    'u-suspend': el => admDo('update', { email: el.dataset.id, suspended: !!el.dataset.s }, el.dataset.s ? tr('أُوقف الحساب', 'Suspended') : tr('أُعيد تفعيل الحساب', 'Reactivated')),
+    'u-delete': el => { if (confirm(tr(`حذف حساب ${el.dataset.id} نهائياً؟ لا يمكن التراجع.`, `Permanently delete ${el.dataset.id}?`))) admDo('delete', { email: el.dataset.id }, tr('حُذف المستخدم', 'User deleted')); },
+    'u-create': () => openModal(tr('إضافة مستخدم', 'Add user'), `<form class="f" data-form="ucreate" novalidate>
+      <label>${tr('الاسم', 'Name')}<input name="name" required maxlength="80"></label>
+      <label>${tr('البريد الإلكتروني (اسم الدخول)', 'Email (login)')}<input name="email" type="email" required dir="ltr"></label>
+      <div class="cols"><label>${tr('كلمة مرور مؤقتة', 'Temporary password')}<input name="password" required minlength="8" dir="ltr"></label>
+      <label>${tr('الدور', 'Role')}<select name="role">${Object.entries(ROLE()).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label></div>
+      <div class="cols"><label>${tr('الجوال', 'Mobile')}<input name="phone" dir="ltr"></label><label>${tr('التخصص', 'Specialty')}<input name="specialty"></label></div>
+      <p class="err" role="alert"></p><button class="btn gold">${tr('إنشاء الحساب', 'Create account')}</button></form>`),
+    'u-perms': el => { const u = admUser(el.dataset.id); if (!u) return; openModal(tr('محفظة الصلاحيات', 'Permissions') + ' — ' + esc(u.name), `<form class="f" data-form="uperms" data-id="${esc(u.email)}">
+      ${R.adm.allPerms.map(p => `<label style="display:flex;gap:10px;align-items:center;font-weight:400"><input type="checkbox" name="p" value="${p}" ${u.perms.includes(p) ? 'checked' : ''} style="width:20px;min-height:20px">${PERM()[p]}</label>`).join('')}
+      <label>${tr('كلمة مرور جديدة (اختياري)', 'New password (optional)')}<input name="password" minlength="8" dir="ltr" autocomplete="new-password"></label>
+      <p class="err" role="alert"></p><button class="btn gold">${tr('حفظ الصلاحيات', 'Save permissions')}</button>
+      <button type="button" class="btn soft" data-act="u-perms-reset" data-id="${esc(u.email)}">${tr('إرجاع لصلاحيات الدور الافتراضية', 'Reset to role defaults')}</button></form>`); },
+    'u-perms-reset': el => admDo('update', { email: el.dataset.id, perms: null }, tr('أُعيدت الصلاحيات الافتراضية', 'Reset to defaults')),
+    'u-sub': el => openModal(tr('منح اشتراك مباشر', 'Grant subscription'), `<form class="f" data-form="usub" data-id="${esc(el.dataset.id)}">
+      <p class="note">${tr('يُفعَّل الاشتراك فوراً بدون دفع ولا تُحتسب عليه عمولة.', 'Activates immediately with no payment and no commission.')}</p>
+      <div class="cols"><label>${tr('الباقة', 'Plan')}<select name="plan">${SEED.plans.filter(p => p.monthlySAR).map(p => `<option value="${p.id}">${esc(title(p))}</option>`).join('')}</select></label>
+      <label>${tr('المدة بالأيام', 'Days')}<input name="days" type="number" min="1" max="3650" value="30"></label></div>
+      <p class="err" role="alert"></p><button class="btn gold">${tr('منح الاشتراك', 'Grant')}</button></form>`),
+    'u-wallet': el => { const id = el.dataset.id, pool = id === 'trainers_pool', u = admUser(id), es = R.adm.ledger.filter(e => e.account === id);
+      openModal(tr('المحفظة', 'Wallet') + ' — ' + (pool ? tr('رصيد المدربين', 'Trainer pool') : esc(u?.name || id)), `<p><strong>${tr('الرصيد', 'Balance')}: ${sar(pool ? R.adm.pool : u?.balance)}</strong></p>
+      <div class="rows" style="margin-block:12px;max-height:200px;overflow:auto">${es.length ? es.map(ledgerRow).join('') : `<p class="muted">${tr('لا توجد حركات.', 'No transactions.')}</p>`}</div>
+      <form class="f" data-form="uledger" data-id="${esc(id)}"><div class="cols">
+        <label>${tr('نوع القيد', 'Entry')}<select name="type">${pool ? `<option value="payout">${tr('صرف من الرصيد', 'Payout')}</option>` : `<option value="payout">${tr('صرف مستحقات (خصم)', 'Payout (debit)')}</option><option value="credit">${tr('إضافة رصيد', 'Add credit')}</option><option value="from-pool">${tr('توزيع من رصيد المدربين', 'From trainer pool')}</option>`}</select></label>
+        <label>${tr('المبلغ (ر.س)', 'Amount (SAR)')}<input name="amountSAR" type="number" min="1" step="0.01" required></label></div>
+        <label>${tr('ملاحظة', 'Note')}<input name="note" maxlength="200"></label>
+        <p class="err" role="alert"></p><button class="btn gold">${tr('تسجيل القيد', 'Record')}</button></form>`); },
     'adm-tab': el => { R.adminTab = el.dataset.id; render(); },
     'adm-activate': async el => { try { await api('subscription-manager?action=activate', { id: el.dataset.id }); toast(tr('تم التفعيل', 'Activated')); loadAdmin(); } catch (e) { toast(e.message); } },
-    'adm-booking': async el => { try { await api('booking-engine?action=status', { id: el.dataset.id, status: el.dataset.s }); loadAdmin(); } catch (e) { toast(e.message); } },
+    'adm-booking': async el => { try { await api('booking-engine?action=status', { id: el.dataset.id, status: el.dataset.s, trainerEmail: $('#tr-' + el.dataset.id)?.value || '' }); R.wallet = null; loadAdmin(); } catch (e) { toast(e.message); } },
     'adm-link': async el => { try { await api('courses-and-paths?action=approve-link', { id: el.dataset.id, approved: !!el.dataset.s }); await refresh(); } catch (e) { toast(e.message); } },
     'adm-role': async el => { try { await api('auth-rbac?action=set-role', { email: el.dataset.id, role: el.dataset.s || el.value }); toast(tr('تم تحديث الصلاحية', 'Role updated')); loadAdmin(); refresh(); } catch (e) { toast(e.message); } }
   };
@@ -736,6 +821,11 @@
       await api('content-library', d); modal.close(); toast(tr('نُشر المحتوى', 'Content published'));
       await refresh(); if (!['course', 'library'].includes(route().name)) location.hash = '#/library';
     },
+    async commission(f, d) { await api('admin-users?action=settings', d); toast(tr('حُفظت النسب', 'Rates saved')); await loadAdmin(); },
+    async ucreate(f, d) { await api('admin-users?action=create', d); modal.close(); toast(tr('أُنشئ الحساب', 'Account created')); await loadAdmin(); refresh(); },
+    async uperms(f, d) { await api('admin-users?action=update', Object.assign({ email: f.dataset.id, perms: new FormData(f).getAll('p') }, d.password ? { password: d.password } : {})); modal.close(); toast(tr('حُفظت الصلاحيات', 'Permissions saved')); await loadAdmin(); },
+    async usub(f, d) { await api('admin-users?action=grant-sub', Object.assign({ email: f.dataset.id }, d)); modal.close(); toast(tr('مُنح الاشتراك', 'Subscription granted')); await loadAdmin(); },
+    async uledger(f, d) { const pool = f.dataset.id === 'trainers_pool'; await api('admin-users?action=ledger', Object.assign(pool ? { account: 'trainers_pool' } : { email: f.dataset.id }, d)); modal.close(); R.wallet = null; toast(tr('سُجّل القيد', 'Entry recorded')); await loadAdmin(); },
     async profile(f, d) { const r = await api('auth-rbac?action=profile', d); S.user = r.user; save(false); toast(tr('حُفظ الملف التعريفي', 'Profile saved')); await refresh(); },
     async auth(f, d) {
       const res = await api('auth-rbac?action=' + f.dataset.mode, d);
@@ -786,13 +876,14 @@
     R.q = e.target.value.trim();
     if (!['home', 'free', 'paid', 'paths', 'library'].includes(route().name)) location.hash = '#/home'; else render();
   });
+  document.addEventListener('input', e => { if (e.target.id !== 'uq') return; R.uq = e.target.value; const pos = e.target.selectionStart; render(); const n = $('#uq'); n.focus(); n.setSelectionRange(pos, pos); });
   $('#currency').addEventListener('change', e => { S.currency = e.target.value; save(false); render(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#assistant').hidden) $('#assistant').hidden = true; });
 
   /* ---------- التهيئة ---------- */
   const I18N = {
     skip: ['تخطَّ إلى المحتوى', 'Skip to content'], 'nav.home': ['الرئيسية', 'Home'], 'nav.paid': ['الكورسات المدفوعة (تأهيل وظيفي)', 'Paid courses (job-ready)'],
-    'nav.free': ['المكتبة المجانية (يوتيوب)', 'Free library (YouTube)'], 'nav.paths': ['مسارات التعلم', 'Learning paths'], 'nav.library': ['مكتبة المحتوى', 'Content library'], 'nav.trainers': ['المدربون', 'Trainers'], addLink: ['+ أضف رابط', '+ Add link'],
+    'nav.free': ['المكتبة المجانية (يوتيوب)', 'Free library (YouTube)'], 'nav.paths': ['مسارات التعلم', 'Learning paths'], 'nav.library': ['مكتبة المحتوى', 'Content library'], 'nav.trainers': ['المدربون', 'Trainers'], 'nav.admin': ['إدارة المستخدمين', 'User management'], addLink: ['+ أضف رابط', '+ Add link'],
     'foot.tag': ['تعلّم مجاناً، وتأهّل لسوق العمل في السعودية ومصر.', 'Learn free and get job-ready in Saudi Arabia and Egypt.'], 'nav.platforms': ['بوابة المنصات العالمية', 'Global platforms'],
     'nav.pricing': ['الباقات والاشتراكات', 'Plans & pricing'], 'join.trainee': ['سجّل كمتدرب', 'Join as trainee'], 'join.instructor': ['انضم كمحاضر', 'Join as instructor'], 'join.contractor': ['تسجيل المقاولين B2B', 'Contractors B2B'],
     search: ['ابحث عن كورس، تخصص هندسي، أو أداة ذكاء اصطناعي...', 'Search a course, field or AI tool...']
