@@ -30,10 +30,18 @@
 | `WHATSAPP_NUMBER` | رقم واتساب بالصيغة الدولية بدون `+` (مثل `9665XXXXXXXX`) لأزرار التواصل والاشتراك |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | حساب مدير المنصة (تفعيل الاشتراكات، تأكيد الحجوزات، اعتماد الروابط والمحاضرين) |
 | `NOTIFY_EMAIL` + `RESEND_API_KEY` | (اختياري) إرسال الإشعارات بالبريد عبر Resend |
+| `MOYASAR_SECRET_KEY` | مفتاح Moyasar السري (`sk_live_…`): يفعّل «مدى / Apple Pay / بطاقة» عبر صفحة الدفع المستضافة |
+| `PAYMOB_SECRET_KEY` / `PAYMOB_PUBLIC_KEY` / `PAYMOB_HMAC_SECRET` / `PAYMOB_WALLET_INTEGRATION_ID` | فودافون كاش عبر Paymob (مفاتيح مصر + رقم Integration ID لمحفظة الموبايل + سر HMAC) |
 | `SESSION_SECRET` | (اختياري) مفتاح توقيع الجلسات؛ يُولَّد تلقائياً إن لم يُضبط |
 
 بدون `RESEND_API_KEY` تُرسل أحداث المنصة إلى نموذج Netlify Forms باسم `platform-events`؛
 فعّل Forms ثم أضف إشعار بريد من: Site configuration → Notifications → Form submission notifications.
+
+## الدفع الإلكتروني
+- `netlify/functions/payments.js`: يُنشئ عملية الدفع والمبلغ يُحسب دائماً من سجل الاشتراك في الخادم. أي طريقة بلا مفاتيحها لا تظهر للمتدرب، ويبقى الدفع عبر واتساب.
+- **Moyasar (مدى، Apple Pay، البطاقات):** فاتورة مستضافة؛ لا يُصدَّق إشعار الدفع قبل إعادة جلب الفاتورة بالمفتاح السري ومطابقة الحالة والمبلغ والعملة. Apple Pay يظهر في صفحة Moyasar بعد تفعيله وتوثيق نطاق الموقع من لوحة Moyasar.
+- **Paymob (فودافون كاش):** Intention API + Unified Checkout؛ يُتحقَّق من توقيع HMAC-SHA512 لإشعار المعالجة ثم من المبلغ والعملة قبل التفعيل. أضف في لوحة Paymob عنوان الإشعار: `https://<موقعك>/api/payments?action=paymob-callback`. المبلغ بالجنيه = السعر بالريال × سعر التحويل في `seed-data.js`.
+- عند نجاح الدفع يُفعَّل الاشتراك تلقائياً وتُسجَّل نسبة المنصة في المحافظ بدون تكرار حتى لو تكرر الإشعار.
 
 ## ملاحظات
 - الدفع يُستكمل عبر واتساب ثم يفعّل المدير الاشتراك من «حسابي ← لوحة المدير».

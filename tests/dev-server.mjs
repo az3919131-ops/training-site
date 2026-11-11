@@ -18,5 +18,5 @@ http.createServer(async (req, res) => {
     const file = join(ROOT, normalize(url.pathname === '/' ? 'index.html' : url.pathname));
     if (!file.startsWith(ROOT)) throw 0;
     res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream' }); res.end(await readFile(file));
-  } catch { res.writeHead(404); res.end('Not found'); }
+  } catch { if (!res.headersSent) res.writeHead(404); res.end('Not found'); }
 }).listen(PORT, () => console.log(`http://localhost:${PORT}`));

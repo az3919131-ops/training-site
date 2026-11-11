@@ -96,4 +96,52 @@ assert.equal((await call(auth, '?action=me', null, ttok)).s, 401);
 assert.equal((await call(auth, '?action=login', { email: 'tr@example.com', password: 'password1' })).s, 403);
 await call(adm, '?action=delete', { email: 'tr@example.com' }, admin);
 assert.equal((await call(adm, '', null, admin)).users.some(u => u.email === 'tr@example.com'), false);
+
+// بوابات الدفع (مزوّدان محاكيان)
+const pay = await load('payments'); const { paymobHmac } = await import('../netlify/functions/payments.js');
+assert.deepEqual((await call(pay, '?action=methods')).methods, { mada: false, applepay: false, vodafone: false });
+process.env.MOYASAR_SECRET_KEY = 'sk_test_x'; process.env.PAYMOB_SECRET_KEY = 'egy_sk_x'; process.env.PAYMOB_PUBLIC_KEY = 'egy_pk_x';
+process.env.PAYMOB_HMAC_SECRET = 'hm'; process.env.PAYMOB_WALLET_INTEGRATION_ID = '777';
+let inv = null, sent = {};
+globalThis.fetch = async (u, o = {}) => {
+  const ok = (d, s = 200) => new Response(JSON.stringify(d), { status: s });
+  if (String(u).endsWith('/v1/invoices') && o.method === 'POST') { sent.moy = JSON.parse(o.body); inv = { id: 'inv-1', status: 'initiated', amount: sent.moy.amount, currency: 'SAR', url: 'https://checkout.moyasar.com/invoices/inv-1' }; return ok(inv, 201); }
+  if (String(u).includes('/v1/invoices/inv-1')) return ok(inv);
+  if (String(u).endsWith('/v1/intention/')) { sent.pm = JSON.parse(o.body); sent.pmAuth = o.headers.authorization; return ok({ id: 'pi-1', client_secret: 'cs_1' }); }
+  return ok({}, 404);
+};
+const buyer = (await call(auth, '?action=register', { name: 'Pay Er', email: 'payer@example.com', password: 'password1', phone: '+201001234567' })).token;
+assert.deepEqual((await call(pay, '?action=methods')).methods, { mada: true, applepay: true, vodafone: true });
+assert.equal((await call(pay, '?action=checkout', { method: 'mada' }, buyer)).s, 400);                // لا اشتراك بانتظار الدفع
+await call(subs, '?action=subscribe', { plan: 'all-access', cycle: 'monthly' }, buyer);
+// مدى / Apple Pay
+r = await call(pay, '?action=checkout', { method: 'applepay', amountSAR: 1 }, buyer);                  // محاولة تحديد السعر من العميل تُتجاهل
+assert.equal(sent.moy.amount, 14900); assert.equal(r.url, 'https://checkout.moyasar.com/invoices/inv-1');
+let pid = r.pid, st = await call(pay, '?action=status&pid=' + pid);
+assert.equal(st.status, 'pending');
+assert.equal((await call(pay, `?action=moyasar-callback&pid=${pid}&t=wrong`, {})).s, 403);               // رمز خاطئ
+inv.status = 'paid'; inv.amount = 100;                                                                   // مبلغ غير مطابق لا يُفعّل
+await call(pay, '?action=status&pid=' + pid); assert.equal((await call(subs, '', null, buyer)).subscription.status, 'pending');
+inv.amount = 14900;
+assert.equal((await call(pay, '?action=status&pid=' + pid)).status, 'paid');
+const before = (await call(adm, '', null, admin)).platform;
+await call(pay, '?action=status&pid=' + pid);                                                            // تكرار: بدون قيود مضاعفة
+assert.equal((await call(adm, '', null, admin)).platform, before);
+assert.equal((await call(subs, '', null, buyer)).subscription.status, 'active');
+// فودافون كاش
+await call(subs, '?action=cancel', {}, buyer); await call(subs, '?action=subscribe', { plan: 'all-access', cycle: 'monthly' }, buyer);
+assert.equal((await call(pay, '?action=checkout', { method: 'vodafone', phone: '123' }, buyer)).s, 400);
+r = await call(pay, '?action=checkout', { method: 'vodafone', phone: '+201001234567' }, buyer);
+assert.equal(sent.pm.amount, Math.ceil(149 * 13) * 100); assert.equal(sent.pmAuth, 'Token egy_sk_x'); assert.deepEqual(sent.pm.payment_methods, [777]);
+assert.match(r.url, /unifiedcheckout\/\?publicKey=egy_pk_x&clientSecret=cs_1/);
+const tx = amount => ({ obj: { amount_cents: amount, created_at: '2026-01-01T00:00:00', currency: 'EGP', error_occured: false, has_parent_transaction: false, id: 9, integration_id: 777,
+  is_3d_secure: true, is_auth: false, is_capture: false, is_refunded: false, is_standalone_payment: true, is_voided: false, order: { id: 5, merchant_order_id: r.pid },
+  owner: 1, pending: false, source_data: { pan: '01001', sub_type: 'wallet', type: 'wallet' }, success: true } });
+let t1 = tx(Math.ceil(149 * 13) * 100);
+assert.equal((await call(pay, '?action=paymob-callback&hmac=bad', t1)).s, 403);                           // توقيع مزوّر
+const bad = tx(100); assert.equal((await call(pay, '?action=paymob-callback&hmac=' + paymobHmac(bad.obj, 'hm'), bad)).ok, true);
+assert.equal((await call(subs, '', null, buyer)).subscription.status, 'pending');                          // مبلغ غير مطابق
+assert.equal((await call(pay, '?action=paymob-callback&hmac=' + paymobHmac(t1.obj, 'hm'), t1)).ok, true);
+assert.equal((await call(subs, '', null, buyer)).subscription.status, 'active');
+assert.equal((await call(pay, '?action=status&pid=' + r.pid)).status, 'paid');
 console.log('✓ smoke tests passed');

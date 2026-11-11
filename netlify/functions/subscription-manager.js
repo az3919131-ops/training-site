@@ -2,8 +2,8 @@
 import { db } from '../../src/lib/db.js';
 import { json, fail, readBody, action, clean, newId, currentUser, subscriptionOf, can } from '../../src/lib/http.js';
 import { notify } from '../../src/lib/notify.js';
-import { settings, addEntry, PLATFORM, POOL } from '../../src/lib/wallet.js';
-import { SEED, DAY } from '../../src/lib/seed.js';
+import { activateSubscription } from '../../src/lib/billing.js';
+import { SEED } from '../../src/lib/seed.js';
 
 export default async req => {
   const act = action(req);
@@ -58,15 +58,7 @@ export default async req => {
     if (!can(me, 'subs.manage')) return fail(403, 'لا تملك صلاحية إدارة الاشتراكات.');
     const sub = await db.get('subscriptions', clean(b.id, 60));
     if (!sub) return fail(404, 'الاشتراك غير موجود.');
-    const from = Math.max(Date.now(), sub.periodEnd ? new Date(sub.periodEnd).getTime() : 0);
-    sub.periodEnd = new Date(from + (sub.cycle === 'yearly' ? 365 : 30) * DAY).toISOString();
-    sub.status = 'active'; sub.activatedAt = new Date().toISOString();
-    await db.set('subscriptions', sub.id, sub);
-    // قيد مالي: دفعة المتدرب، نسبة المنصة، والباقي لرصيد المدربين
-    const { commissionTrainee } = await settings(), fee = sub.amountSAR * commissionTrainee / 100;
-    await addEntry(sub.email, 'payment', sub.amountSAR, `اشتراك ${sub.planTitle}`, sub.id);
-    await addEntry(PLATFORM, 'commission', fee, `نسبة المنصة ${commissionTrainee}% من اشتراك ${sub.name}`, sub.id);
-    await addEntry(POOL, 'earning', sub.amountSAR - fee, `حصة المدربين من اشتراك ${sub.name}`, sub.id);
+    await activateSubscription(sub, newId('man-'));
     return json({ subscription: sub });
   }
   return fail(404, 'عملية غير معروفة.');

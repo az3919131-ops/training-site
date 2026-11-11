@@ -2,7 +2,7 @@
 export const STORES = [
   'users', 'free_youtube_courses', 'paid_job_courses', 'learning_paths',
   'user_plans_and_reviews', 'hourly_bookings', 'subscriptions', 'certificates',
-  'notifications', 'config', 'content_library', 'content_files', 'wallet_ledger'
+  'notifications', 'config', 'content_library', 'content_files', 'wallet_ledger', 'payments'
 ];
 
 const mem = (globalThis.__ILTIZAM_MEM ||= {});

@@ -15,7 +15,7 @@
     lang: 'ar', theme: '', currency: 'SAR', plan: [], favs: [], progress: {}, reviews: [], links: [],
     notifs: [], bookings: [], certs: [], token: '', user: null, sub: null, last: ''
   }, (() => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } })());
-  const R = { cat: 'all', q: '', cycle: 'monthly', content: [], trainers: [], links: [], paidLessons: {}, wa: CONFIG.whatsapp, playing: null, admin: null, adminTab: 'subs' };
+  const R = { cat: 'all', q: '', cycle: 'monthly', methods: {}, content: [], trainers: [], links: [], paidLessons: {}, wa: CONFIG.whatsapp, playing: null, admin: null, adminTab: 'subs' };
   let syncTimer;
   function save(sync = true) {
     try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { /* التخزين غير متاح */ }
@@ -399,6 +399,7 @@
           ${u.role === 'admin' ? `<p class="muted">${tr('حساب المدير يملك كل الصلاحيات.', 'Admin has full access.')}</p>`
             : sub && sub.id ? `<p><strong>${esc(sub.planTitle)}</strong> · ${sub.cycle === 'yearly' ? tr('سنوي', 'Yearly') : tr('شهري', 'Monthly')} <span class="status ${esc(sub.status)}">${statusText(sub.status)}</span></p>
               ${sub.periodEnd ? `<p class="small muted">${tr('ينتهي في', 'Ends')}: ${new Date(sub.periodEnd).toLocaleDateString(S.lang === 'en' ? 'en' : 'ar-EG')}</p>` : ''}
+              ${['pending', 'renewal_due', 'expired'].includes(sub.status) ? payButtons(sub) : ''}
               <div class="tabs">${['pending', 'renewal_due', 'expired'].includes(sub.status) ? `<a class="btn gold sm" target="_blank" rel="noopener" href="${waLink(subMsg(sub))}">${tr('أكمل الدفع عبر واتساب', 'Pay via WhatsApp')}</a>` : ''}
               ${['active', 'pending'].includes(sub.status) ? `<button class="btn danger sm" data-act="cancel-sub">${tr('إلغاء الاشتراك', 'Cancel')}</button>` : `<a class="btn primary sm" href="#/pricing">${tr('اشترك من جديد', 'Subscribe again')}</a>`}</div>`
             : `<p class="muted">${tr('أنت على الباقة المجانية.', 'You are on the free plan.')}</p><div class="tabs"><a class="btn gold sm" href="#/pricing">${tr('عرض الباقات', 'See plans')}</a></div>`}
@@ -636,9 +637,18 @@
       <label>${tr('ملاحظاتك', 'Your notes')}<textarea name="text" required maxlength="1000">${esc(r.text)}</textarea></label>
       <p class="err" role="alert"></p><button class="btn gold">${tr('حفظ المراجعة', 'Save review')}</button></form>`);
   }
+  const egpOf = sar => Math.ceil(sar * SEED.rates.EGP).toLocaleString('en') + ' ' + tr('ج.م', 'EGP');
+  function payButtons(sub) {
+    const m = R.methods, any = m.mada || m.applepay || m.vodafone;
+    if (!ONLINE || !S.user || !sub?.id || !sub.amountSAR || !any) return '';
+    return `<div class="stack" style="margin-block-end:12px"><strong>${tr('ادفع إلكترونياً', 'Pay online')}</strong>
+      ${m.mada || m.applepay ? `<button class="btn start block" data-act="pay" data-id="mada">${tr('مدى / Apple Pay / بطاقة', 'mada / Apple Pay / card')} — ${sar(sub.amountSAR)}</button>` : ''}
+      ${m.vodafone ? `<button class="btn block" style="background:#e60000;color:#fff" data-act="pay" data-id="vodafone">${tr('فودافون كاش', 'Vodafone Cash')} — ${egpOf(sub.amountSAR)}</button>` : ''}
+      <p class="small muted">${tr('تتم عملية الدفع على صفحة آمنة عند مزوّد الدفع، ولا تُحفظ بيانات بطاقتك لدينا. يُفعَّل اشتراكك تلقائياً فور نجاح الدفع.', 'Payment is made on the provider’s secure page. Your plan activates automatically once it succeeds.')}</p></div>`;
+  }
   function subDone(sub) {
     openModal(tr('تم تسجيل طلب الاشتراك', 'Subscription request received'), `<p>${tr('طلبك الآن', 'Your request is')} <span class="status ${esc(sub.status)}">${statusText(sub.status)}</span>. ${tr('أكمل الدفع عبر واتساب وسيُفعَّل اشتراكك فور التأكيد.', 'Complete payment on WhatsApp and it will be activated once confirmed.')}</p>
-      <div class="stack" style="margin-block-start:16px"><a class="btn gold block" target="_blank" rel="noopener" href="${waLink(subMsg(sub))}">${tr('أكمل الدفع عبر واتساب', 'Pay via WhatsApp')}</a><button class="btn soft block" data-act="close">${tr('لاحقاً', 'Later')}</button></div>`);
+      <div class="stack" style="margin-block-start:16px">${payButtons(sub)}<a class="btn ${payButtons(sub) ? 'soft' : 'gold'} block" target="_blank" rel="noopener" href="${waLink(subMsg(sub))}">${tr('أو أكمل الدفع عبر واتساب', 'Or pay via WhatsApp')}</a><button class="btn soft block" data-act="close">${tr('لاحقاً', 'Later')}</button></div>`);
   }
   async function subscribe(planId) {
     const plan = SEED.plans.find(p => p.id === planId); if (!plan) return;
@@ -736,6 +746,13 @@
     review: el => reviewModal(el.dataset.id || S.last || SEED.free[1].id, el.dataset.rid),
     'del-review': el => { S.reviews = S.reviews.filter(r => r.id !== el.dataset.id); save(); render(); },
     subscribe: el => subscribe(el.dataset.id),
+    pay: el => {
+      if (el.dataset.id === 'vodafone') return openModal(tr('الدفع عبر فودافون كاش', 'Pay with Vodafone Cash'), `<form class="f" data-form="pay" data-method="vodafone" novalidate>
+        <p class="note">${tr('المبلغ', 'Amount')}: <strong>${egpOf(S.sub.amountSAR)}</strong> ${tr('(بسعر تحويل تقريبي من الريال السعودي)', '(approximate conversion from SAR)')}</p>
+        <label>${tr('رقم محفظة فودافون كاش', 'Vodafone Cash wallet number')}<input name="phone" type="tel" required dir="ltr" placeholder="01XXXXXXXXX" value="${esc(S.user?.phone || '')}"></label>
+        <p class="err" role="alert"></p><button class="btn gold">${tr('المتابعة إلى الدفع', 'Continue to payment')}</button></form>`);
+      FORMS.pay(null, { method: el.dataset.id }).catch(e => toast(e.message));
+    },
     auth: el => authModal(el.dataset.id),
     logout: () => { S.token = ''; S.user = null; S.sub = null; R.admin = null; R.adm = null; R.wallet = null; save(false); toast(tr('تم تسجيل الخروج', 'Logged out')); refresh(); },
     'cancel-sub': async () => { if (!confirm(tr('تأكيد إلغاء الاشتراك؟', 'Cancel subscription?'))) return; try { S.sub = (await api('subscription-manager?action=cancel', {})).subscription; save(false); render(); } catch (e) { toast(e.message); } },
@@ -811,6 +828,10 @@
   document.addEventListener('change', e => { const el = e.target.closest('[data-change]'); if (el && A[el.dataset.change]) A[el.dataset.change](el); });
   const fileB64 = f => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = () => no(new Error(tr('تعذرت قراءة الملف.', 'Could not read file.'))); r.readAsDataURL(f); });
   const FORMS = {
+    async pay(f, d) {
+      const method = f ? f.dataset.method : d.method, r = await api('payments?action=checkout', { method, phone: d.phone });
+      toast(tr('جارٍ تحويلك إلى صفحة الدفع…', 'Redirecting to payment…')); location.href = r.url;
+    },
     async content(f, d) {
       const file = d.file && d.file.size ? d.file : null; delete d.file;
       if (!d.title.trim()) throw new Error(tr('اكتب عنواناً.', 'Add a title.'));
@@ -900,6 +921,7 @@
   async function refresh() {
     if (ONLINE) {
       try { const d = await api('courses-and-paths'); R.links = d.links || []; R.paidLessons = d.paidLessons || {}; R.wa = d.config?.whatsapp || CONFIG.whatsapp; } catch { /* يعمل بالبيانات المحلية */ }
+      try { R.methods = (await api('payments?action=methods')).methods || {}; } catch { /* اختياري */ }
       try { R.content = (await api('content-library')).items || []; R.trainers = (await api('auth-rbac?action=instructors')).instructors || []; } catch { /* اختياري */ }
       if (S.token) {
         try {
@@ -921,7 +943,19 @@
   applyPrefs();
   const qs = new URLSearchParams(location.search), join = qs.get('join'), ver = qs.get('verify');
   if (ver) location.hash = '#/verify/' + encodeURIComponent(ver);
-  if (join || ver) history.replaceState(null, '', location.pathname + location.hash);
+  const paid = qs.get('paid');
+  if (join || ver || paid) history.replaceState(null, '', location.pathname + location.hash);
+  async function payResult(pid) {
+    openModal(tr('نتيجة الدفع', 'Payment result'), `<p id="payMsg" class="muted">${tr('جارٍ التحقق من الدفع…', 'Verifying payment…')}</p>`);
+    for (let i = 0; i < 8; i++) {
+      let st; try { st = (await api('payments?action=status&pid=' + encodeURIComponent(pid))).status; } catch { st = 'error'; }
+      const box = $('#payMsg'); if (!box) return;
+      if (st === 'paid') { box.outerHTML = `<div class="verify"><div class="seal">✅</div><h2>${tr('تم الدفع بنجاح', 'Payment successful')}</h2><p>${tr('اشتراكك فعّال الآن. استمتع بالدبلومات والمرفقات.', 'Your plan is active.')}</p><div class="stack" style="margin-block-start:16px"><a class="btn gold block" href="#/paid" data-act="close">${tr('تصفح الدبلومات', 'Browse diplomas')}</a></div></div>`; await refresh(); return; }
+      if (st === 'failed') { box.outerHTML = `<div class="verify"><div class="seal">❌</div><h2>${tr('لم تكتمل عملية الدفع', 'Payment not completed')}</h2><p class="muted">${tr('لم يُخصم أي مبلغ. يمكنك المحاولة مرة أخرى من «اشتراكي».', 'You can try again from My subscription.')}</p></div>`; return; }
+      await new Promise(r => setTimeout(r, 2500));
+    }
+    const box = $('#payMsg'); if (box) box.textContent = tr('لم يصلنا تأكيد الدفع بعد. إن تم الخصم فسيُفعَّل اشتراكك تلقائياً خلال دقائق، وإلا تواصل معنا عبر واتساب.', 'Confirmation has not arrived yet. If you were charged your plan will activate within minutes.');
+  }
   render();
-  refresh().then(() => { if (join && !S.user) authModal('register', { contractor: 'contractor_b2b' }[join] || join); });
+  refresh().then(() => { if (paid) payResult(paid); if (join && !S.user) authModal('register', { contractor: 'contractor_b2b' }[join] || join); });
 })();

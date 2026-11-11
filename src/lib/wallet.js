@@ -8,8 +8,8 @@ export const POOL = 'trainers_pool';    // حصة المدربين من الاش
 export async function settings() {
   return Object.assign({ commissionTrainer: 20, commissionTrainee: 30 }, (await db.get('config', 'commission')) || {});
 }
-export async function addEntry(account, type, amountSAR, note, ref = '') {
-  const e = { id: `${Date.now()}-${newId()}`, account, type, amountSAR: Math.round(amountSAR * 100) / 100, note, ref, at: new Date().toISOString() };
+export async function addEntry(account, type, amountSAR, note, ref = '', id = '') {
+  const e = { id: id || `${Date.now()}-${newId()}`, account, type, amountSAR: Math.round(amountSAR * 100) / 100, note, ref, at: new Date().toISOString() };
   await db.set('wallet_ledger', e.id, e);
   return e;
 }
