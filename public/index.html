@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>التزام التدريب+ | Iltizam Training</title>
+  <meta name="description" content="منصة التزام التدريب: كورسات مجانية مرتبة من يوتيوب ودبلومات مدفوعة مؤهلة لسوق العمل في مشاريع الكهرباء والعقد الموحد والمكتب الفني والذكاء الاصطناعي واللغات.">
+  <meta name="theme-color" content="#0B1120">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230B1120'/%3E%3Cpath d='M20 46V18h8v28zm16 0V18h8v28z' fill='%23F59E0B'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;700&family=Reem+Kufi:wght@600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main" data-i18n="skip">تخطَّ إلى المحتوى</a>
+
+  <svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7Z"/><path d="M10 20a2 2 0 0 0 4 0"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-plan" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="16" rx="3"/><path d="M8 3v4M16 3v4M4 10h16M9 15l2 2 4-4"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.8-4.5 4.3 1.1 6.1L12 16.9 6.6 19.8l1.1-6.1L3.2 9.4l6.1-.8Z"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4Z"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <div class="topbar-in">
+      <a class="logo" href="#/home" aria-label="التزام التدريب+ — الرئيسية">التزام التدريب<span>+</span></a>
+      <nav class="mainnav" aria-label="التنقل الرئيسي">
+        <a href="#/home" data-nav="home" data-i18n="nav.home">الرئيسية</a>
+        <a href="#/paid" data-nav="paid" data-i18n="nav.paid">الكورسات المدفوعة (تأهيل وظيفي)</a>
+        <a href="#/free" data-nav="free" data-i18n="nav.free">المكتبة المجانية (يوتيوب)</a>
+        <a href="#/paths" data-nav="paths" data-i18n="nav.paths">مسارات التعلم</a>
+      </nav>
+      <form class="search" role="search" id="searchForm">
+        <svg class="ic" aria-hidden="true"><use href="#i-search"/></svg>
+        <input id="q" type="search" autocomplete="off" aria-label="بحث" data-i18n-ph="search" placeholder="ابحث عن كورس، تخصص هندسي، أو أداة ذكاء اصطناعي...">
+      </form>
+      <div class="tools">
+        <select id="currency" class="pick" aria-label="العملة والدولة">
+          <option value="SAR">🇸🇦 SAR</option><option value="EGP">🇪🇬 EGP</option><option value="USD">🇺🇸 USD</option>
+        </select>
+        <button class="pick" data-act="lang" id="langBtn" aria-label="Switch language">EN</button>
+        <button class="tool" data-act="theme" aria-label="الوضع الليلي" title="الوضع الليلي"><svg class="ic"><use href="#i-moon"/></svg></button>
+        <button class="tool" data-act="notifs" aria-label="الإشعارات" title="الإشعارات"><svg class="ic"><use href="#i-bell"/></svg><b class="dot" id="notifDot" hidden></b></button>
+        <a class="tool" href="#/account" data-nav="account" title="حسابي" aria-label="حسابي"><svg class="ic"><use href="#i-user"/></svg></a>
+        <a class="tool" href="#/plan" data-nav="plan" title="خطتي" aria-label="خطتي"><svg class="ic"><use href="#i-plan"/></svg><b class="count" id="planCount" hidden></b></a>
+        <a class="tool" href="#/reviews" data-nav="reviews" title="مراجعاتي" aria-label="مراجعاتي"><svg class="ic"><use href="#i-star"/></svg></a>
+        <a class="tool" href="#/settings" data-nav="settings" title="الإعدادات" aria-label="الإعدادات"><svg class="ic"><use href="#i-gear"/></svg></a>
+        <button class="btn gold sm" data-act="add-link" data-i18n="addLink">+ أضف رابط</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1"></main>
+
+  <footer class="foot">
+    <div class="foot-in">
+      <div>
+        <strong class="logo">التزام التدريب<span>+</span></strong>
+        <p data-i18n="foot.tag">تعلّم مجاناً، وتأهّل لسوق العمل في السعودية ومصر.</p>
+      </div>
+      <nav aria-label="روابط سريعة">
+        <a href="#/platforms" data-i18n="nav.platforms">بوابة المنصات العالمية</a>
+        <a href="#/pricing" data-i18n="nav.pricing">الباقات والاشتراكات</a>
+        <a href="/join/trainee" data-join="trainee" data-i18n="join.trainee">سجّل كمتدرب</a>
+        <a href="/join/instructor" data-join="instructor" data-i18n="join.instructor">انضم كمحاضر</a>
+        <a href="/join/contractor" data-join="contractor" data-i18n="join.contractor">تسجيل المقاولين B2B</a>
+        <a href="https://www.youtube.com/channel/UCIwaNW_dWlbpz8GdLeJJ0Ag/" target="_blank" rel="noopener">Alpha Media ↗</a>
+      </nav>
+    </div>
+    <p class="credit">Project manager &nbsp;Eng&nbsp; Ahmed Zahran</p>
+  </footer>
+
+  <button class="fab" data-act="assistant" aria-label="المساعد الذكي والدعم السريع" title="المساعد الذكي والدعم السريع"><svg class="ic"><use href="#i-chat"/></svg></button>
+  <aside class="assistant" id="assistant" hidden aria-label="المساعد السريع"></aside>
+
+  <dialog id="modal" aria-labelledby="modalTitle"><div id="modalBody"></div></dialog>
+  <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+  <!-- نموذج Netlify Forms: يستقبل أحداث المنصة ويرسلها بريدياً لمدير المنصة -->
+  <form name="platform-events" method="POST" data-netlify="true" netlify-honeypot="bot-field" hidden>
+    <input name="bot-field"><input name="type"><input name="title"><textarea name="details"></textarea>
+  </form>
+
+  <script src="seed-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

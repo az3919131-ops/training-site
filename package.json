@@ -1,0 +1,15 @@
+{
+  "name": "iltizam-training",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "منصة التزام التدريب — Iltizam Training (Netlify full-stack)",
+  "scripts": {
+    "dev": "netlify dev",
+    "test": "node tests/smoke.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  },
+  "engines": { "node": ">=18" }
+}

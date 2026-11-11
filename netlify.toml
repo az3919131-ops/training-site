@@ -1,0 +1,36 @@
+# التزام التدريب — Iltizam Training
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# التجديد الشهري: يعمل يومياً ويفحص الاشتراكات المنتهية
+[functions."cron-monthly-renewal"]
+  schedule = "@daily"
+
+# API
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# روابط التسجيل المباشر: /join/instructor | /join/trainee | /join/contractor
+[[redirects]]
+  from = "/join/:role"
+  to = "/?join=:role"
+  status = 302
+
+# التحقق من الشهادات عبر رمز QR
+[[redirects]]
+  from = "/verify/:code"
+  to = "/?verify=:code"
+  status = 302
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Frame-Options = "SAMEORIGIN"
